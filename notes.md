@@ -2,24 +2,15 @@
 
 export PATH=$PATH:./node_modules/.bin/
 
-install Pi
+install Pi and Playwright GLI
 ```bash
 npm install --ignore-scripts @earendil-works/pi-coding-agent
+npm install @playwright/cli
 ```
 
 launch Pi
 ```bash
 pi
-```
-
-update Pi
-```bash
-npm update --ignore-scripts @earendil-works/pi-coding-agent
-```
-
-install Playwright CLI
-```bash
-npm install @playwright/cli
 ```
 
 a simple scenario: snapshot the login page, login, snapshot the welcome page
@@ -80,22 +71,3 @@ $env:PLAYWRIGHT_BROWSERS_PATH = "C:\Users\$env:USERNAME\AppData\Local\ms-playwri
 
 
 Rename `.claude` into `.pi`.
-
-
-
-## Notes on using Pi
-
-| Command | Description |
-| --------| ----------- |pl
-| `/quit` | Quit Pi     |
-| `/login` | Configure provider authentication |
-| `/logout` | Remove provider authentication |
-| `/model` | Select model |
-| `/reload` | Reload keybindings, extensions, skills, prompts, and themes |
-| `/session` | Show session info and stats |
-| `/reload` | Reload keybindings, extensions, skills, prompts, and themes |
-| `/skill<skill-name>` |  |
-| `/export` |  |
-
-
-
