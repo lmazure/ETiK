@@ -8,6 +8,11 @@ npm install --ignore-scripts @earendil-works/pi-coding-agent
 npm install @playwright/cli
 ```
 
+install Playwright skill
+```bash
+playwright-cli install --skill
+```
+
 launch Pi
 ```bash
 pi
@@ -24,10 +29,7 @@ playwright-cli screenshot
 playwright-cli close
 ```
 
-install Playwright skill
-```bash
-playwright-cli install --skill
-```
+
 This is stuck. This does not work currently with node 26 (https://github.com/microsoft/playwright/issues/40724) while I use 26.2.0.  
 I need to downgrade node 24.16.0.  
 The problem is still present.  
