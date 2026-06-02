@@ -2,8 +2,9 @@ FROM mcr.microsoft.com/devcontainers/javascript-node:24-bullseye
 
 USER root
 
-# Install Claude Code CLI and Playwright CLI globally
-RUN npm install -g @anthropic-ai/claude-code @playwright/cli
+# Install Claude Code CLI and Playwright CLI globally. @playwright/cli is pinned
+# so its bundled playwright stays matched to the browser baked in below.
+RUN npm install -g @anthropic-ai/claude-code @playwright/cli@0.1.13
 
 # Install Playwright browser system dependencies (needed to run Chromium in the
 # container). Pinned to the same version as the browser install below.
