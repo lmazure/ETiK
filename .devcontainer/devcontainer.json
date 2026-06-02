@@ -1,0 +1,17 @@
+{
+  "name": "ETiK",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "mounts": [
+    // Named volume so Playwright browsers survive container rebuilds
+    "source=etik-playwright-browsers,target=/home/node/.cache/ms-playwright,type=volume"
+  ],
+  // Playwright CLI is installed globally in the Dockerfile; install its skill
+  // into .claude/skills/playwright-cli/
+  "postCreateCommand": "playwright-cli install --skills",
+  "remoteEnv": {
+    // Forward the API key from the host so Claude Code works without interactive login
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
+  }
+}
