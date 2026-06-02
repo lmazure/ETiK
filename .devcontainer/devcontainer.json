@@ -3,13 +3,11 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
-  "mounts": [
-    // Named volume so Playwright browsers survive container rebuilds
-    "source=etik-playwright-browsers,target=/home/node/.cache/ms-playwright,type=volume"
-  ],
+  // Chromium is baked into the image (see Dockerfile), so no named volume is
+  // needed and no browser download happens at runtime.
   // Playwright CLI is installed globally in the Dockerfile; install its skill
-  // into .claude/skills/playwright-cli/
-  "postCreateCommand": "playwright-cli install --skills",
+  // into .claude/skills/playwright-cli/ (CI=1 keeps it non-interactive).
+  "postCreateCommand": "CI=1 playwright-cli install --skills",
   "remoteEnv": {
     // Forward the API key from the host so Claude Code works without interactive login
     "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
