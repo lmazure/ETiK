@@ -3,6 +3,11 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  // Map host.docker.internal to the host gateway so the container can reach any
+  // web app published on a host port (e.g. http://host.docker.internal:8090 for
+  // a Compose stack, or any other locally-running service). This keeps the dev
+  // container decoupled from any specific Compose network.
+  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
   // Chromium is baked into the image (see Dockerfile), so no named volume is
   // needed and no browser download happens at runtime.
   // Playwright CLI is installed globally in the Dockerfile; install its skill
