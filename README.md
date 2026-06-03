@@ -6,7 +6,13 @@ This repository is (and will stay) ver messy.
 
 Experimenting with Claude Code and Playwright CLI impressed me a lot. But there are much too many commands to be approved. So Claude Code needs to be run in YOLO mode. I am currently focused on how to do this safely.
 
-1) Run the VS Code Command `Dev Containers: Rebuild and Reopen in Container` in the image has not been built yet, otherwise run `Dev Containers: Reopen in Container`.
-1) Start a shell
+The first time:
+1) Run the VS Code Command `Dev Containers: Rebuild and Reopen in Container`.
+1) Start a shell, then, in this one:
     1) Run `cat '"theme": "dark"' > ~/.claude/settings.json`.
+    1) Run `claude --dangerously-skip-permissions`.
+
+Then
+1) Run `Dev Containers: Reopen in Container`.
+1) Start a shell, then, in this one:
     1) Run `claude --dangerously-skip-permissions`.
