@@ -1,7 +1,7 @@
 - The two `RUN npx -y playwright@1.61.0-alpha-1778188671000` in `Dockerfile` are dubious
 - The `ANTHROPIC_API_KEY` transfer is useless.  
    How to not have to log into Claude Code via the Browser?
-
+- How to avoir the questions at the first launch of Claude Code?
 
 
 Quick smoke test:

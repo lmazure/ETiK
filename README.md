@@ -9,7 +9,6 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
 The first time:
 1) Run the VS Code Command `Dev Containers: Rebuild and Reopen in Container`.
 1) Start a shell, then, in this one:
-    1) Run `cat '"theme": "dark"' > ~/.claude/settings.json`.
     1) Run `claude --dangerously-skip-permissions`.
 
 Then
