@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "@earendil-works/pi-coding-agent": "^0.74.2",
-    "@playwright/cli": "^0.1.13"
-  }
-}

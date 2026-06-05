@@ -1,2 +1,5 @@
-node_modules
+*.png
+.playwright
 .playwright-cli
+.claude/skills/playwright-cli
+.claude/settings.local.json
