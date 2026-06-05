@@ -9,6 +9,8 @@ Quick smoke test:
 Log to http://host.docker.internal:8090/squash/login as admin / admin and generate a screenshot.
 ```
 
+In the CLAUDE.md indictae:
+- Do not try to access the API, only use the UI.
 
 Docker Compose file to use for starting SquaqhTM (with `docker compose up -d`)
 ```yaml
