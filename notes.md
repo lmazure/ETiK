@@ -1,15 +1,15 @@
 - The two `RUN npx -y playwright@1.61.0-alpha-1778188671000` in `Dockerfile` are dubious
 - The `ANTHROPIC_API_KEY` transfer is useless.  
    How to not have to log into Claude Code via the Browser?
-- How to avoir the questions at the first launch of Claude Code?
+- How to avoid the questions at the first launch of Claude Code?
 
 
 Quick smoke test:
 ```
-Log to http://host.docker.internal:8090/squash/login as admin / admin and generate a screenshot.
+Log in http://host.docker.internal:8090/squash/login as admin / admin and generate a screenshot.
 ```
 
-In the CLAUDE.md indictae:
+In the CLAUDE.md indicate:
 - Do not try to access the API, only use the UI.
 
 Docker Compose file to use for starting SquaqhTM (with `docker compose up -d`)
