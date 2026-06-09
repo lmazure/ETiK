@@ -3,16 +3,7 @@
    How to not have to log into Claude Code via the Browser?
 - How to avoid the questions at the first launch of Claude Code?
 
-
-Quick smoke test:
-```
-Log in http://host.docker.internal:8090/squash/login as admin / admin and generate a screenshot.
-```
-
-In the CLAUDE.md indicate:
-- Do not try to access the API, only use the UI.
-
-Docker Compose file to use for starting SquaqhTM (with `docker compose up -d`)
+Docker Compose file to use for starting SquashTM (with `docker compose up -d`)
 ```yaml
   services:
     squashtm-pg:
