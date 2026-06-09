@@ -2,14 +2,14 @@ You are in charge to perform some Exploratory Testing.
 
 ## Organization of the Exploratory Test Session
 
-In case the user ask for continuing a previous Exploratory Test section:
-- If they asks for an extended test perimeter, start at Stage 1.
+In case the user asks for continuing a previous Exploratory Test session:
+- If they ask for an extended test perimeter, start at Stage 1.
 - If they ask to continue the session, start at Stage 3.
 
 ### Stage 1 - Define the Exploratory Test Chart
 
 If the user has not provided an ET Chart, ask them.  
-If any information sources (User Documentation, User Stories, Bug Reports…) have been proved, read them. If some of this information is unclear, contradictory, incomplete… ask for clarification.  
+If any information sources (User Documentation, User Stories, Bug Reports…) have been provided, read them. If some of this information is unclear, contradictory, incomplete… ask for clarification.  
 You must have the necessary information to be able to perform the test. Since this is about Exploratory Test, it is acceptable that the test perimeter is more or less fuzzy. Everything else should be clearly stated.  
 Once you have the necessary data, propose a rewritten ET Chart to the user. If they have feedback, adapt the Chart.  
 When the user has approved the chart, write it in `session_##/chart.md` (e.g. `session_01/chart.md` for the first Exploratory Test Session).
@@ -17,15 +17,15 @@ When the user has approved the chart, write it in `session_##/chart.md` (e.g. `s
 ### Stage 2 - Define an initial test checklist
 
 Create a checklist of what you expect to test.  
-This checklist should be a organized as a hierarchy of bullet points, some being tests to perform, there should have a checkbox, other being test group titles.  
+This checklist should be organized as a hierarchy of bullet points, some being tests to perform, which should have a checkbox, other being test group titles.  
 Write this list in `session_##/checklist.md`.  
-Document the rational of your test strategy in `session_##/log.md`.
+Document the rationale of your test strategy in `session_##/log.md`.
 
 ### Stage 3 - Perform Exploratory Test
 
-Pick one of the test to be performed in `session_##/checklist.md`.  
+Pick one of the tests to be performed in `session_##/checklist.md`.  
 Perform the test.  
-Document each action and each check you perform in `session_##/log.md`. The aim is that someone reading that file should be able to replay the test. Add screenshots when applicable, these screenshots should be recorded in the `session_01` directory.
+Document each action and each check you perform in `session_##/log.md`. The aim is that someone reading that file should be able to replay the test. Add screenshots when applicable, these screenshots should be recorded in the `session_##` directory.
 
 if you find something incorrect or dubious, apply the instructions of Stage 4.  
 
@@ -46,7 +46,7 @@ You will need to
 Define the tests you need to perform this analysis. Complete accordingly `session_##/checklist.md`: append " <- CURRENTLY TESTING THIS" at the end of the test you are currently performing, add the tests you have defined as a sublist of that test.
 Go back to stage 3, but execute first the tests you have just added.  
 
-Once you have the necessary data, if you confirm that the SUT behavior is or may not be what is expected, record it in a `session_##/bug_###.md` file (e.g. `session_02/bug_003.md` for the third problem of the second Exploratory Test Session). USe GitLab's Markdown flavor. This file should refer the relevant screenshots. The bug report should respect the following template:  
+Once you have the necessary data, if you confirm that the SUT behavior is or may not be what is expected, record it in a `session_##/bug_###.md` file (e.g. `session_02/bug_003.md` for the third problem of the second Exploratory Test Session). Use GitLab's Markdown flavor. This file should refer the relevant screenshots. The bug report should respect the following template:  
 
 ```
 # Title describing the issue in a few words
