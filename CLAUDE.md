@@ -2,6 +2,8 @@ You are in charge to perform some Exploratory Testing.
 
 ## Organization of the Exploratory Test Session
 
+If the user starts a brand-new Exploratory Test session, start at Stage 1.
+
 In case the user asks for continuing a previous Exploratory Test session:
 - If they ask for an extended test perimeter, start at Stage 1.
 - If they ask to continue the session, start at Stage 3.
@@ -12,7 +14,7 @@ If the user has not provided an ET Chart, ask them.
 If any information sources (User Documentation, User Stories, Bug Reports…) have been provided, read them. If some of this information is unclear, contradictory, incomplete… ask for clarification.  
 You must have the necessary information to be able to perform the test. Since this is about Exploratory Test, it is acceptable that the test perimeter is more or less fuzzy. Everything else should be clearly stated.  
 Once you have the necessary data, propose a rewritten ET Chart to the user. If they have feedback, adapt the Chart.  
-When the user has approved the chart, write it in `session_##/chart.md` (e.g. `session_01/chart.md` for the first Exploratory Test Session).
+When the user has approved the chart, write it in `session_##/chart.md` (`##` is a two-digit, 1-based counter. To choose it, scan the existing `session_*` directories and pick the next available value, e.g. `session_01/chart.md` for the first Exploratory Test Session).
 
 ### Stage 2 - Define an initial test checklist
 
@@ -46,7 +48,7 @@ You will need to
 Define the tests you need to perform this analysis. Complete accordingly `session_##/checklist.md`: append " <- CURRENTLY TESTING THIS" at the end of the test you are currently performing, add the tests you have defined as a sublist of that test.
 Go back to stage 3, but execute first the tests you have just added.  
 
-Once you have the necessary data, if you confirm that the SUT behavior is or may not be what is expected, record it in a `session_##/bug_###.md` file (e.g. `session_02/bug_003.md` for the third problem of the second Exploratory Test Session). Use GitLab's Markdown flavor. This file should refer the relevant screenshots. The bug report should respect the following template:  
+Once you have the necessary data, if you confirm that the SUT behavior is or may not be what is expected, record it in a `session_##/bug_###.md` file (`###` is a three-digit, 1-based counter. To choose it, scan the existing `bug_*.md` files in the current session directory and pick the next available value, e.g. `session_02/bug_003.md` for the third problem of the second Exploratory Test Session). Use GitLab's Markdown flavor. This file should refer the relevant screenshots. The bug report should respect the following template:  
 
 ```
 # Title describing the issue in a few words
