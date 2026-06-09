@@ -44,7 +44,6 @@ You will need to
 - define what is the trigger and the perimeter of this behavior.  
 - analyze what could be the worse impact of this behavior: security vulnerability, data loss, data corruption, invisible unexpected data change…
 
-
 Define the tests you need to perform this analysis. Complete accordingly `session_##/checklist.md`: append " <- CURRENTLY TESTING THIS" at the end of the test you are currently performing, add the tests you have defined as a sublist of that test.
 Go back to stage 3, but execute first the tests you have just added.  
 
@@ -83,6 +82,14 @@ Describe where is the SUT (URL).
 Provide the date and time of the test.  
 Indicate the name of the model (LLM), the thinking level, and the name of the tool piloting the LLM.
 ```
+
+Whatever the outcome, once the analysis of a behavior is complete, remove the " <- CURRENTLY TESTING THIS" marker from **that** test (the most deeply nested one you opened) and check the boxes of the analysis tests you performed for it. Any ancestor tests keep their marker, since their own analysis is still ongoing; you finish unwinding them the same way as you climb back up.
+
+Record the conclusion of the analysis in `session_##/log.md` in every case:
+- If you confirmed the misbehavior, log the conclusion and record it in the `session_##/bug_###.md` file as described above.
+- If the analysis cleared the behavior (it turned out to be correct or acceptable), do not write a bug report; just log the conclusion and why the behavior is in fact expected.
+
+Then resume Stage 3, continuing with the remaining tests at the level you have returned to.
 
 ## System Under Test
 
