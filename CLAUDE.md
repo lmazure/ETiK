@@ -5,16 +5,16 @@ You are in charge to perform some Exploratory Testing.
 If the user starts a brand-new Exploratory Test session, start at Stage 1.
 
 In case the user asks for continuing a previous Exploratory Test session:
-- If they ask for an extended test perimeter, start at Stage 1.
-- If they ask to continue the session, start at Stage 3.
+- If they ask for an extended test perimeter, start at Stage 1 with a new session.
+- If they ask to continue the session (either the last or one whose number is provided by the user), start at Stage 3.
 
-### Stage 1 - Define the Exploratory Test Chart
+### Stage 1 - Define the Exploratory Test Charter
 
-If the user has not provided an ET Chart, ask them.  
+If the user has not provided an ET Charter, ask them.  
 If any information sources (User Documentation, User Stories, Bug Reports…) have been provided, read them. If some of this information is unclear, contradictory, incomplete… ask for clarification.  
 You must have the necessary information to be able to perform the test. Since this is about Exploratory Test, it is acceptable that the test perimeter is more or less fuzzy. Everything else should be clearly stated.  
-Once you have the necessary data, propose a rewritten ET Chart to the user. If they have feedback, adapt the Chart.  
-When the user has approved the chart, write it in `session_##/chart.md` (`##` is a two-digit, 1-based counter. To choose it, scan the existing `session_*` directories and pick the next available value, e.g. `session_01/chart.md` for the first Exploratory Test Session).
+Once you have the necessary data, propose a rewritten ET Charter to the user. If they have feedback, adapt the Charter.  
+When the user has approved the charter, write it in `session_##/charter.md` (`##` is a two-digit increment, 1-based counter, e.g. `session_01/charter.md` for the first Exploratory Test Session).
 
 ### Stage 2 - Define an initial test checklist
 
@@ -27,13 +27,13 @@ Document the rationale of your test strategy in `session_##/log.md`.
 
 Pick one of the tests to be performed in `session_##/checklist.md`.  
 Perform the test.  
-Document each action and each check you perform in `session_##/log.md`. The aim is that someone reading that file should be able to replay the test. Add screenshots when applicable, these screenshots should be recorded in the `session_##` directory.
+Document each action and each check you perform in `session_##/log.md`. The aim is that someone reading that file should be able to replay the test. Add screenshots where applicable, these screenshots should be recorded in the `session_##` directory. If you install and/or use any tool, indicate them in the log file.
 
 if you find something incorrect or dubious, apply the instructions of Stage 4.  
 
 Once the test is performed, check the test's checkbox in `session_##/checklist.md`.  
 
-When all tests have been performed, report a small session summary reporting an overview of the reported bugs.
+When all tests have been performed, report interactively to the user a small session summary reporting an overview of the reported bugs.
 
 ### Stage 4 - Updating the test strategy to analyze incorrect or dubious SUT behavior
 
@@ -44,13 +44,16 @@ You will need to
 - define what is the trigger and the perimeter of this behavior.  
 - analyze what could be the worse impact of this behavior: security vulnerability, data loss, data corruption, invisible unexpected data change…
 
-Define the tests you need to perform this analysis. Complete accordingly `session_##/checklist.md`: append " <- CURRENTLY TESTING THIS" at the end of the test you are currently performing, add the tests you have defined as a sublist of that test.
+Define the tests you need to perform this analysis. Complete accordingly `session_##/checklist.md`: append " <- CURRENTLY TESTING THIS" at the end of the test you are currently performing, add the tests you have defined as a sublist of that test.  
+Do not nest investigations more than 2 deep; ; if a further nesting would be needed, log the oddity as dubious and move on.  
 Go back to stage 3, but execute first the tests you have just added.  
 
-Once you have the necessary data, if you confirm that the SUT behavior is or may not be what is expected, record it in a `session_##/bug_###.md` file (`###` is a three-digit, 1-based counter. To choose it, scan the existing `bug_*.md` files in the current session directory and pick the next available value, e.g. `session_02/bug_003.md` for the third problem of the second Exploratory Test Session). Use GitLab's Markdown flavor. This file should refer the relevant screenshots. The bug report should respect the following template:  
+Once you have the necessary data, if you confirm that the SUT behavior is or may not be what is expected, record it in a `session_##/bug_###.md` file (`###` is a three-digit increment, 1-based counter, e.g. `session_02/bug_003.md` for the third problem of the second Exploratory Test Session).  
+Use GitLab Flavored Markdown.  
+This file should refer the relevant screenshots or other attachments when adequate. These references should appear where the most appropriate in the flow of the report, do not list them in a separate section. The bug report should respect the following template:  
 
 ```
-# Title describing the issue in a few words
+# [Feature] Concise description
 
 ## Summary
 
@@ -58,7 +61,7 @@ A short description of the issue.
 
 ## Steps to Reproduce
 
-A numbered list of actions. Add screenshots when adequate.
+A numbered list of actions.
 
 ## Expected Result
 
@@ -77,7 +80,7 @@ What is the importance of the problem?
 
 ## Environment
 
-Explain that this issue is reported as a finding during an Exploratory Test session. Provide the ET Chart of the session.  
+Explain that this issue is reported as a finding during an Exploratory Test session. Provide the ET Charter of the session.  
 Describe where is the SUT (URL).  
 Provide the date and time of the test.  
 Indicate the name of the model (LLM), the thinking level, and the name of the tool piloting the LLM.
@@ -89,7 +92,8 @@ Record the conclusion of the analysis in `session_##/log.md` in every case:
 - If you confirmed the misbehavior, log the conclusion and record it in the `session_##/bug_###.md` file as described above.
 - If the analysis cleared the behavior (it turned out to be correct or acceptable), do not write a bug report; just log the conclusion and why the behavior is in fact expected.
 
-Then resume Stage 3, continuing with the remaining tests at the level you have returned to.
+Then resume Stage 3, continuing with the remaining tests at the level you have returned to.  
+When you have written 16 `bug_###.md` files., stop the Exploratory Testing Session.
 
 ## System Under Test
 
