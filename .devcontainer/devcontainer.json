@@ -3,18 +3,26 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
-  // Map host.docker.internal to the host gateway so the container can reach any
-  // web app published on a host port (e.g. http://host.docker.internal:8090 for
-  // a Compose stack, or any other locally-running service). This keeps the dev
-  // container decoupled from any specific Compose network.
-  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
+  // NET_ADMIN / NET_RAW let the post-start firewall script program iptables.
+  // host.docker.internal still maps to the host gateway so the container can
+  // reach a web app published on a host port (e.g. http://host.docker.internal:8090
+  // for a Compose stack, or any other locally-running service). This keeps the
+  // dev container decoupled from any specific Compose network.
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+    "--add-host=host.docker.internal:host-gateway"
+  ],
   // Chromium is baked into the image (see Dockerfile), so no named volume is
   // needed and no browser download happens at runtime.
   // Playwright CLI is installed globally in the Dockerfile; install its skill
   // into .claude/skills/playwright-cli/ (CI=1 keeps it non-interactive).
+  // postCreate runs once, BEFORE postStart, i.e. before the firewall locks
+  // egress down — so it still has full network access to fetch the skill.
   "postCreateCommand": "CI=1 playwright-cli install --skills",
-  "remoteEnv": {
-    // Forward the API key from the host so Claude Code works without interactive login
-    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
-  }
+  // Re-apply the egress allowlist on every start. iptables rules live in the
+  // container's network namespace and do NOT survive a restart, so this must be
+  // postStart (every start), not postCreate (once). Default-deny outbound except
+  // allowlisted infra domains and the host gateway. See init-firewall.sh.
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh"
 }
