@@ -1,6 +1,7 @@
 - Improve bug reports  (maybe by providing an example)
   - the screenshot should be embedded in the text
-
+- move SUT-specific instructions in a dedicated file
+- move the list of authorized sites in a dedicated file and update `README.md`
 
 Docker Compose file to use for starting SquashTM (with `docker compose up -d`)
 ```yaml
