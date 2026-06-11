@@ -1,7 +1,6 @@
-- The two `RUN npx -y playwright@1.61.0-alpha-1778188671000` in `Dockerfile` are dubious
-- The `ANTHROPIC_API_KEY` transfer is useless.  
-   How to not have to log into Claude Code via the Browser?
-- How to avoid the questions at the first launch of Claude Code?
+- Improve bug reports  (maybe by providing an example)
+  - the screenshot should be embedded in the text
+
 
 Docker Compose file to use for starting SquashTM (with `docker compose up -d`)
 ```yaml
