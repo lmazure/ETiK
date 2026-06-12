@@ -27,7 +27,7 @@ Document the rationale of your test strategy in `session_##/log.md`.
 
 Pick one of the tests to be performed in `session_##/checklist.md`.  
 Perform the test.  
-Document each action and each check you perform in `session_##/log.md`. The aim is that someone reading that file should be able to replay the test. Add screenshots where applicable, these screenshots should be recorded in the `session_##` directory. If you install and/or use any tool, indicate them in the log file.
+Document each action and each check you perform at the end of `session_##/log.md`. The aim is that someone reading that file should be able to replay the test. Add screenshots where applicable, these screenshots should be recorded in the `session_##` directory. If you install and/or use any tool, indicate them in the log file.
 
 if you find something incorrect or dubious, apply the instructions of Stage 4.  
 
@@ -38,7 +38,7 @@ When all tests have been performed, report interactively to the user a small ses
 ### Stage 4 - Updating the test strategy to analyze incorrect or dubious SUT behavior
 
 If the behavior of the SUT is incorrect or dubious, you need to characterize it.  
-Record in `session_##/log.md` why you considered the SUT behavior as incorrect or dubious.
+Record at the end of `session_##/log.md` why you considered the SUT behavior as incorrect or dubious.
 
 You will need to
 - define what is the trigger and the perimeter of this behavior.  
@@ -88,7 +88,7 @@ Indicate the name of the model (LLM), the thinking level, and the name of the to
 
 Whatever the outcome, once the analysis of a behavior is complete, remove the " <- CURRENTLY TESTING THIS" marker from **that** test (the most deeply nested one you opened) and check the boxes of the analysis tests you performed for it. Any ancestor tests keep their marker, since their own analysis is still ongoing; you finish unwinding them the same way as you climb back up.
 
-Record the conclusion of the analysis in `session_##/log.md` in every case:
+Record the conclusion of the analysis at the end of `session_##/log.md` in every case:
 - If you confirmed the misbehavior, log the conclusion and record it in the `session_##/bug_###.md` file as described above.
 - If the analysis cleared the behavior (it turned out to be correct or acceptable), do not write a bug report; just log the conclusion and why the behavior is in fact expected.
 

@@ -78,7 +78,9 @@ for domain in \
     statsig.anthropic.com \
     statsig.com \
     sentry.io \
-    registry.npmjs.org ; do
+    registry.npmjs.org \
+    tm-en.doc.squashtest.com \
+    tm-fr.doc.squashtest.com ; do
     ips=$(dig +short A "$domain" 2>/dev/null || true)
     if [ -z "$ips" ]; then
         echo "  WARNING: failed to resolve $domain (skipping)"
