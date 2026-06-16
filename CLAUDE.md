@@ -27,9 +27,9 @@ Document the rationale of your test strategy in `session_##/log.md`.
 
 Pick one of the tests to be performed in `session_##/checklist.md`.  
 Perform the test.  
-Document each action and each check you perform at the end of `session_##/log.md`. The aim is that someone reading that file should be able to replay the test. Add screenshots where applicable, these screenshots should be recorded in the `session_##` directory. If you install and/or use any tool, indicate them in the log file.
+Document each action and each check you perform at the end of `session_##/log.md`. The aim is that someone reading that file should be able to replay the test. Add screenshots where applicable, these screenshots should be recorded in the `session_##` directory, use semantic filenames. If you install and/or use any tool, indicate them in the log file.
 
-if you find something incorrect or dubious, apply the instructions of Stage 4.  
+if you find something incorrect (not respecting what information sources or the user indicated) or dubious (not respecting what you would expect), apply the instructions of Stage 4.  
 
 Once the test is performed, check the test's checkbox in `session_##/checklist.md`.  
 
