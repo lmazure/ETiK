@@ -102,5 +102,5 @@ An instance available at http://host.docker.internal:8090/squash/login. You can 
 
 ## Testing Rules
 
-- Interact with SquashTM UI using Playwright CLI.
+- Interact with SquashTM UI using Playwright CLI. This one is already installed, see playwright-cli skill.
 - Do not try to access the REST API, only use the UI.
