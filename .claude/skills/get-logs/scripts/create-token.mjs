@@ -1,8 +1,10 @@
 import { randomUUID } from "crypto";
+import { readFileSync, writeFileSync } from "fs";
 
-const BASE_URL = "http://host.docker.internal:8090/squash";
-const LOGIN    = "admin";
-const PASSWORD = "admin";
+const BASE_URL  = "http://host.docker.internal:8090/squash";
+const LOGIN     = "admin";
+const PASSWORD  = "admin";
+const CACHE_FILE = `/tmp/squashtm_api_token_${LOGIN}`;
 
 /**
  * Parses Set-Cookie headers and merges them into an existing cookie map.
@@ -102,5 +104,11 @@ async function generateApiToken(baseUrl, login, password) {
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────────
-const token = await generateApiToken(BASE_URL, LOGIN, PASSWORD);
+let token;
+try {
+  token = readFileSync(CACHE_FILE, "utf-8").trim();
+} catch {
+  token = await generateApiToken(BASE_URL, LOGIN, PASSWORD);
+  writeFileSync(CACHE_FILE, token, { mode: 0o600 });
+}
 console.log("API token:", token);
