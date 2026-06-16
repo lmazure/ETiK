@@ -1,15 +1,13 @@
 import { randomUUID } from "crypto";
 import { readFileSync, writeFileSync } from "fs";
 
-const BASE_URL  = "http://host.docker.internal:8090/squash";
-const LOGIN     = "admin";
-const PASSWORD  = "admin";
+const BASE_URL = "http://host.docker.internal:8090/squash";
+const LOGIN    = "admin";
+const PASSWORD = "admin";
+const LOG_FILE = "squash-tm.log";
+
 const CACHE_FILE = `/tmp/squashtm_api_token_${LOGIN}`;
 
-/**
- * Parses Set-Cookie headers and merges them into an existing cookie map.
- * Later values win (same behaviour as TokenHelper#mergeCookies).
- */
 function parseCookies(setCookieHeaders, existing = {}) {
   const cookies = { ...existing };
   for (const header of setCookieHeaders ?? []) {
@@ -23,21 +21,18 @@ function parseCookies(setCookieHeaders, existing = {}) {
   return cookies;
 }
 
-/** Serialises a cookie map to a Cookie header string. */
 function serializeCookies(cookies) {
   return Object.entries(cookies)
     .map(([k, v]) => `${k}=${v}`)
     .join("; ");
 }
 
-/** Throws if the response status is not in the 2xx–3xx range. */
 function assertSuccessful(response, operation) {
   if (response.status < 200 || response.status >= 400) {
     throw new Error(`Unexpected status for ${operation}: ${response.status}`);
   }
 }
 
-/** Returns an ISO-8601 timestamp one year from now, with no milliseconds. */
 function expiryDateOneYearFromNow() {
   const d = new Date();
   d.setFullYear(d.getFullYear() + 1);
@@ -45,14 +40,8 @@ function expiryDateOneYearFromNow() {
   return d.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-/**
- * Authenticates with SquashTM and creates a new API token.
- *
- * @returns {Promise<string>} The decoded (plain-text) API token.
- */
-async function generateApiToken(baseUrl, login, password) {
-  // ── Step 1 : fetch the login page to obtain the initial XSRF token ──────
-  const loginPageRes = await fetch(`${baseUrl}/login`);
+async function generateApiToken() {
+  const loginPageRes = await fetch(`${BASE_URL}/login`);
   assertSuccessful(loginPageRes, "GET /login");
 
   let cookies = parseCookies(loginPageRes.headers.getSetCookie());
@@ -61,15 +50,14 @@ async function generateApiToken(baseUrl, login, password) {
     throw new Error("XSRF-TOKEN cookie not found after GET /login");
   }
 
-  // ── Step 2 : post credentials ────────────────────────────────────────────
-  const loginRes = await fetch(`${baseUrl}/backend/login`, {
+  const loginRes = await fetch(`${BASE_URL}/backend/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
       "X-Xsrf-Token": firstXsrfToken,
       Cookie: serializeCookies(cookies),
     },
-    body: new URLSearchParams({ username: login, password }),
+    body: new URLSearchParams({ username: LOGIN, password: PASSWORD }),
     redirect: "manual",
   });
   assertSuccessful(loginRes, "POST /backend/login");
@@ -77,14 +65,13 @@ async function generateApiToken(baseUrl, login, password) {
   cookies = parseCookies(loginRes.headers.getSetCookie(), cookies);
   const secondXsrfToken = cookies["XSRF-TOKEN"] ?? firstXsrfToken;
 
-  // ── Step 3 : create the API token ────────────────────────────────────────
   const payload = {
     name:        `api-test-${randomUUID().slice(0, 8)}`,
     expiryDate:  expiryDateOneYearFromNow(),
     permissions: "READ_WRITE",
   };
 
-  const tokenRes = await fetch(`${baseUrl}/backend/api-token/generate-api-token`, {
+  const tokenRes = await fetch(`${BASE_URL}/backend/api-token/generate-api-token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -103,12 +90,31 @@ async function generateApiToken(baseUrl, login, password) {
   return Buffer.from(encodedToken, "base64").toString("utf-8");
 }
 
-// ── Entry point ──────────────────────────────────────────────────────────────
-let token;
-try {
-  token = readFileSync(CACHE_FILE, "utf-8").trim();
-} catch {
-  token = await generateApiToken(BASE_URL, LOGIN, PASSWORD);
-  writeFileSync(CACHE_FILE, token, { mode: 0o600 });
+async function getToken() {
+  try {
+    return readFileSync(CACHE_FILE, "utf-8").trim();
+  } catch {
+    const token = await generateApiToken();
+    writeFileSync(CACHE_FILE, token, { mode: 0o600 });
+    return token;
+  }
 }
-console.log("API token:", token);
+
+// ── Main ─────────────────────────────────────────────────────────────────────
+const token = await getToken();
+
+const res = await fetch(
+  `${BASE_URL}/api/rest/latest/logs/${encodeURIComponent(LOG_FILE)}/download`,
+  {
+    headers: {
+      Accept: "text/plain",
+      Authorization: `Bearer ${token}`,
+    },
+  }
+);
+
+if (!res.ok) {
+  throw new Error(`Failed to download log (HTTP ${res.status})`);
+}
+
+process.stdout.write(await res.text());
