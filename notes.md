@@ -1,8 +1,12 @@
 - Improve bug reports  (maybe by providing an example).
   - The screenshot should be embedded in the text.
-- Move SUT-specific instructions in a dedicated file.
-- Move the list of authorized sites in a dedicated file and update `README.md`.
+  - Indicate the endpoint that behave badly, this should allow Claude to fix the bug more easily.
+- Remove unnecessary servers from the allowlist.
 - Provide a mean to get logs and add instruction to exploit them.
+- Test of role rights:
+    - Create a lookup of the whole doc.
+    - Try each action for each role.
+- Test with Pi.
 
 -----
 
