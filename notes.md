@@ -1,7 +1,8 @@
+- .vscode/settings.json should not have been committed
+- Reduce the number of allowed servers
 - Improve bug reports  (maybe by providing an example).
   - The screenshot should be embedded in the text.
   - Indicate the endpoint that behave badly, this should allow Claude to fix the bug more easily.
-- Remove unnecessary servers from the allowlist.
 - Provide a mean to get logs and add instruction to exploit them.
 - Test of role rights:
     - Create a lookup of the whole doc.

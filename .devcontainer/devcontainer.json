@@ -13,6 +13,12 @@
     "--cap-add=NET_RAW",
     "--add-host=host.docker.internal:host-gateway"
   ],
+  // The firewall does not allowlist Claude Code's telemetry hosts
+  // (statsig.anthropic.com / sentry.io), so those calls would fail silently.
+  // Disable non-essential traffic at the source so it is not even attempted.
+  "containerEnv": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  },
   // Chromium is baked into the image (see Dockerfile), so no named volume is
   // needed and no browser download happens at runtime.
   // Playwright CLI is installed globally in the Dockerfile; install its skill

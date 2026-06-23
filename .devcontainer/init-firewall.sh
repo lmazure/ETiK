@@ -2,13 +2,10 @@
 # Egress allowlist for the ETiK dev container.
 #
 # Goal: with Claude Code running --dangerously-skip-permissions against untrusted
-# web content, default-deny all outbound traffic and permit only what is needed:
-# the Anthropic API + auth, the npm registry, GitHub, DNS, and the host gateway
-# (the app under test). This bounds the blast radius of a prompt-injection: even
-# if the agent is talked into exfiltrating something, it has nowhere to send it.
+# web content, default-deny all outbound traffic and permit only what is needed.
 #
 # Requires: NET_ADMIN + NET_RAW capabilities (set in devcontainer.json runArgs)
-# and the packages iptables, ipset, dnsutils (dig), aggregate, jq, curl.
+# and the packages iptables, ipset, dnsutils (dig), curl.
 #
 # Re-run on every container start (devcontainer postStartCommand): iptables rules
 # do not persist across restarts.
@@ -16,7 +13,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-echo "== ETiK firewall: applying egress allowlist =="
+echo "== Applying egress allowlist =="
 
 # ---------------------------------------------------------------------------
 # 0. Reset
@@ -47,33 +44,20 @@ iptables -A INPUT  -p tcp --sport 53 -j ACCEPT
 # ---------------------------------------------------------------------------
 ipset create allowed-domains hash:net
 
-# 2a. GitHub IP ranges (web + api + git), IPv4 only.
-echo "Fetching GitHub IP ranges..."
-gh_ranges=$(curl -fsSL --connect-timeout 10 https://api.github.com/meta || true)
-if [ -n "$gh_ranges" ] && echo "$gh_ranges" | jq -e '.web and .api and .git' >/dev/null 2>&1; then
-    while read -r cidr; do
-        [[ "$cidr" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]] || continue
-        ipset add allowed-domains "$cidr" 2>/dev/null || true
-    done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' \
-                | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$' \
-                | aggregate -q 2>/dev/null \
-              || echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' \
-                | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$')
-    echo "  GitHub ranges added."
-else
-    echo "  WARNING: could not fetch/parse GitHub ranges; skipping (git over GitHub may fail)."
-fi
-
-# 2b. Resolve and add the remaining allowed domains.
-#     - Anthropic API + telemetry: model traffic from Claude Code
-#     - claude.ai + console.anthropic.com: browser OAuth login flow
-#     - registry.npmjs.org: npm / playwright-cli skill install
-#     NOTE: these are CDN-fronted (Cloudflare etc.) so their IPs rotate. We
-#     resolve once at start; if login/API calls start failing intermittently,
-#     just re-run this script (sudo /usr/local/bin/init-firewall.sh) to refresh.
+# Resolve and add the allowed domains.
+#    - Anthropic API: model traffic from Claude Code
+#    - claude.ai: browser OAuth login flow + token refresh (Claude subscription)
+#    NOTE 1: these are CDN-fronted (Cloudflare etc.) so their IPs rotate. We
+#    resolve once at start; if login/API calls start failing intermittently,
+#    just re-run this script (sudo /usr/local/bin/init-firewall.sh) to refresh.
+#    NOTE 2: this assumes a Claude subscription login. If you instead log in with
+#    an Anthropic Console account, add console.anthropic.com back (and you can drop
+#    claude.ai).
+#    NOTE 3: Claude Code's telemetry hosts (statsig.anthropic.com / sentry.io) are
+#    intentionally NOT allowlisted; CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC in
+#    devcontainer.json stops those calls from even being attempted.
 for domain in \
     api.anthropic.com \
-    console.anthropic.com \
     claude.ai \
     tm-en.doc.squashtest.com \
     tm-fr.doc.squashtest.com ; do
@@ -88,14 +72,6 @@ for domain in \
     done < <(echo "$ips")
     echo "  Added $domain"
 done
-
-# ---------------------------------------------------------------------------
-# 2c. ADD YOUR TEST TARGETS HERE
-# ---------------------------------------------------------------------------
-# Local apps reached via host.docker.internal are handled in section 3 below.
-# If you exploratory-test a PUBLIC site, add its domain to the loop above.
-# Be aware: every domain you allow is also a potential exfiltration channel,
-# so keep this list as small as the task needs.
 
 # ---------------------------------------------------------------------------
 # 3. Allow the Docker host gateway (the app-under-test on a host port)
@@ -134,10 +110,12 @@ fi
 echo "OK: off-allowlist egress is blocked (example.com unreachable)."
 
 # Sanity check (warning only, to avoid blocking container start on CDN timing).
-if curl --connect-timeout 5 -fsS https://api.github.com/zen >/dev/null 2>&1; then
-    echo "OK: allowlisted egress works (api.github.com reachable)."
+# Any HTTP response means the connection went through; we don't need a 2xx, so
+# no -f here (an unauthenticated GET to api.anthropic.com won't return 2xx).
+if curl --connect-timeout 5 -sS -o /dev/null https://api.anthropic.com 2>/dev/null; then
+    echo "OK: allowlisted egress works (api.anthropic.com reachable)."
 else
-    echo "WARNING: api.github.com not reachable — allowlist may need refreshing."
+    echo "WARNING: api.anthropic.com not reachable — allowlist may need refreshing."
 fi
 
-echo "== ETiK firewall: done =="
+echo "== Egress allowlist applied =="
