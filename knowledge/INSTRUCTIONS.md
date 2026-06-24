@@ -1,12 +1,12 @@
 # SUT Knowledge Base — Format and Rules
 
-This directory is a durable, cross-session memory about the System Under Test (SquashTM). It is intentionally **harness-neutral**: these rules describe plain Markdown files on disk, so any LLM or tool can load and update them. A harness only needs a thin loader (e.g. `CLAUDE.md`, `.cursorrules`) that points here.
+This directory is a durable, cross-session memory about the SUT. It is intentionally **tool-neutral**: these rules describe plain Markdown files on disk, so any tool can load and update them.
 
 ## What this is — and is not
 
 - **Is:** distilled, deduplicated, reusable truth about the SUT — how features are reached in the UI, stable business rules, documentation pages, private backend API calls the web app emits.
 - **Is not:** a session log. A session's `log.md` is a replay trace of one run. Knowledge files are the curated facts extracted from many runs.
-- **Never** store here: session-specific charter/checklist content, bug reports (they are transient and may be fixed), or anything about the **public REST API** (the model must not access it).
+- **Never** store here: session-specific charter/checklist content or bug reports (they are transient and may be fixed).
 
 ## How loading works — index first, then only what's relevant
 
@@ -71,8 +71,6 @@ One file per business entity under `entities/`. Use these exact headings so the 
 ```
 
 Cross-cutting rules that span entities go in `business-rules.md` using the same `## Business rules` / source-tag conventions.
-
-> Reminder: there is **no** public REST API section anywhere in this knowledge base, by design.
 
 ## Update protocol (two phases)
 
