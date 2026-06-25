@@ -2,29 +2,33 @@ You are in charge to perform some Exploratory Testing on SquashTM, a test manage
 
 ## Cross-Session Memory
 
-Across sessions, you accumulate durable knowledge about the SUT in the `knowledge/` directory. The format and update rules live in `knowledge/INSTRUCTIONS.md`. You must read that file.
+Across Exploratory Test Sessions, you accumulate durable knowledge about the SUT in the `knowledge/` directory.  
+The purpose of this knowledge collection is to help you navigate and understand faster the SUT during future Sessions.  
+The format and update rules live in `knowledge/INSTRUCTIONS.md`.  
+You must read that file.
 
 ## Organization of the Exploratory Test Session
 
-If the user starts a brand-new Exploratory Test session, start at Stage 1.
+If the user starts a brand-new Exploratory Test Session, start at Stage 1.
 
-In case the user asks for continuing a previous Exploratory Test session:
-- If they ask for an extended test perimeter, start at Stage 1 with a new session.
-- If they ask to continue the session (either the last or one whose number is provided by the user), start at Stage 3.
+In case the user asks for continuing a previous Exploratory Test Session:
+- If they ask for an extended test perimeter, start at Stage 1 with a new Session.
+- If they ask to continue the Session (either the last or one whose number is provided by the user), start at Stage 3.
 
 ### Stage 1 - Define the Exploratory Test Charter
 
 If the user has not provided an ET Charter, ask them.  
 
-Before anything else, read `knowledge/index.md`. From its entries, open only the knowledge files relevant to the charter at hand. Treat their content as prior knowledge of the SUT; re-check any `assumed` fact your test will depend on. Do not bulk-read the folder.
+Then, read `knowledge/index.md`. From its entries, open only the knowledge files relevant to the Charter at hand. Treat their content as prior knowledge of the SUT; re-check any `assumed` fact your test will depend on. Do not bulk-read the folder.
 
-If any information sources (User Documentation, User Stories, Bug Reports…) have been provided, read them. If some of this information is unclear, contradictory, incomplete… ask for clarification.  
-Then, extract the durable facts about the SUT from these information sources into the relevant `knowledge/` files, tagged `documented` with the session, date, and source name. Append new entries (a doc, a UI page…) rather than overwriting existing ones. Create new files and update `knowledge/index.md` as needed. Capture only stable knowledge about the SUT, not the session-specific charter or checklist content. Never capture anything about the public REST API.
+If any information sources (User Documentation, User Stories, Bug Reports…) have been provided by the user, read them. If some of this provided information is unclear, contradictory (possibly with your knowledge files), incomplete… ask for clarification.
 
-You must have the necessary information to be able to perform the test. ask for information completion if this is not the case. Since this is about Exploratory Test, it is acceptable that the test perimeter is more or less fuzzy. Everything else should be clearly stated.  
+Then, extract the durable facts about the SUT from these information sources into the relevant `knowledge/` files, tagged `documented` with the Session, date, and source name. Append new entries (a doc, a UI page…) rather than overwriting existing ones. Create new files and update `knowledge/index.md` as needed. Capture only stable knowledge about the SUT, not the Session-specific harter or checklist content.
+
+You must have the necessary information to be able to perform the test. Ask for information completion if this is not the case. Since this is about Exploratory Testing, it is acceptable that the test perimeter is more or less fuzzy. Everything else should be clearly stated.
 
 Once you have the necessary data, propose a rewritten Charter to the user. If they have feedback, adapt the Charter.  
-When the user has approved the charter, write it in `session_##/charter.md` (`##` is a two-digit increment, 1-based counter, e.g. `session_01/charter.md` for the first Exploratory Test Session).
+When the user has approved the Charter, write it in `session_##/charter.md` (`##` is a two-digit increment, 1-based counter, e.g. `session_01/charter.md` for the first Exploratory Test Session).
 
 ### Stage 2 - Define an initial test checklist
 
@@ -95,13 +99,13 @@ What is the importance of the problem?
 
 ## Environment
 
-Explain that this issue is reported as a finding during an Exploratory Test session. Provide the ET Charter of the session.  
+Explain that this issue is reported as a finding during an Exploratory Test Session. Provide the ET Charter of the Session.  
 Describe where is the SUT (URL).  
 Provide the date and time of the test.  
 Indicate the name of the model (LLM), the thinking level, and the name of the tool piloting the LLM.
 ```
 
-When an analysis clears a dubious behavior as actually expected, record the underlying rule in `knowledge/business-rules.md` (or the relevant entity file), tagged `observed` or `documented` with the session and date, and update `knowledge/index.md` if you created a file. When you confirm a bug, it goes only to the bug report, never to `knowledge/`, since bugs are transient and may be fixed.
+When an analysis clears a dubious behavior as actually expected, record the underlying rule in `knowledge/business-rules.md` (or the relevant entity file), tagged `observed` or `documented` with the Session and date, and update `knowledge/index.md` if you created a file. When you confirm a bug, it goes only to the bug report, never to `knowledge/`, since bugs are transient and may be fixed.
 
 Whatever the outcome, once the analysis of a behavior is complete, remove the ` <- CURRENTLY TESTING THIS` marker from that test (the most deeply nested one you opened) and check the boxes of the analysis tests you performed for it. Any ancestor tests keep their marker, since their own analysis is still ongoing; you finish unwinding them the same way as you climb back up.
 
@@ -112,12 +116,12 @@ Record the conclusion of the analysis at the end of `session_##/log.md` in every
 Then resume Stage 3, continuing with the remaining tests at the level you have returned to.  
 When you have written 16 `bug_###.md` files, stop the Exploratory Testing Session.
 
-### Stage 5 - Consolidate memory
+### Stage 5 - Consolidate Memory
 
-After the session summary, do a cleanup pass over `knowledge/`:
-- Merge only true duplicates: the same doc page, UI page, or endpoint recorded twice. Keep genuinely distinct entries (different pages, different endpoints) separate, each with its own session/date.
-- Resolve contradictions (keep the newest, note the session and date).
-- Promote `assumed` facts that got confirmed during the session to `observed`.
+After the Session summary, do a cleanup pass over `knowledge/`:
+- Merge only true duplicates: the same doc page, UI page, or endpoint recorded twice. Keep genuinely distinct entries (different pages, different endpoints) separate, each with its own Session/date.
+- Resolve contradictions (keep the newest, note the Session and date).
+- Promote `assumed` facts that got confirmed during the Session to `observed`.
 - Prune dead ends and anything that turned out wrong.
 - Keep each entity file in the standard schema defined in `knowledge/INSTRUCTIONS.md`.
 - Verify `knowledge/index.md` matches the folder: every file has exactly one row, no row points to a missing file, and every scope line is still accurate.
