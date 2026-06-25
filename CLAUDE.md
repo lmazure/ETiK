@@ -1,5 +1,22 @@
 You are in charge to perform some Exploratory Testing on SquashTM, a test management tool.
 
+## File Hierarchy
+
+This project is organized as follows:
+
+- `CLAUDE.md` — this file: the instructions governing how Exploratory Test Sessions are run.
+- `knowledge/` — durable, cross-Session memory about the SUT (see `knowledge/INSTRUCTIONS.md`). It survives across Sessions.
+  - `knowledge/INSTRUCTIONS.md` — the format and update rules for the knowledge base.
+  - `knowledge/index.md` — the only knowledge file loaded every Session: a compact table of pointers (one row per knowledge file).
+  - `knowledge/business-rules.md` — cross-cutting business rules that span more than one entity.
+  - `knowledge/entities/` — contains one file per business entity (its docs, UI pages…).
+- `session_##/` — one directory per Exploratory Test Session (`##` is a two-digit counter). Created and filled while a Session runs:
+  - `session_##/charter.md` — the approved Exploratory Test Charter of the Session .
+  - `session_##/checklist.md` — the hierarchical test checklist with checkboxes (updated as tests are performed).
+  - `session_##/log.md` — the replay trace: every action and check performed, plus test-strategy rationale and analysis conclusions.
+  - `session_##/bug_###.md` — one bug report per confirmed issue (`###` is a three-digit counter within the Session).
+  - `session_##/` also holds screenshots and any other attachments referenced from the log or bug reports, named semantically.
+
 ## Cross-Session Memory
 
 Across Exploratory Test Sessions, you accumulate durable knowledge about the SUT in the `knowledge/` directory.  
