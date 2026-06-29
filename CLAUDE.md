@@ -1,12 +1,12 @@
 You are in charge to perform some Exploratory Testing on SquashTM, a test management tool.
 
-## File Hierarchy
+## File Hierarchy and Immediate Updates
 
 This project is organized as follows:
 
-- `CLAUDE.md` — this file: the instructions governing how Exploratory Test Sessions are run.
+- `CLAUDE.md` — read only — this file: the instructions governing how Exploratory Test Sessions are run.
 - `knowledge/` — durable, cross-Session memory about the SUT (see `knowledge/INSTRUCTIONS.md`). It survives across Sessions.
-  - `knowledge/INSTRUCTIONS.md` — the format and update rules for the knowledge base.
+  - `knowledge/INSTRUCTIONS.md` — read only — the format and update rules for the knowledge base.
   - `knowledge/index.md` — the only knowledge file loaded every Session: a compact table of pointers (one row per knowledge file).
   - `knowledge/business-rules.md` — cross-cutting business rules that span more than one entity.
   - `knowledge/entities/` — contains one file per business entity (its docs, UI pages…).
@@ -17,20 +17,15 @@ This project is organized as follows:
   - `session_##/bug_###.md` — one bug report per confirmed issue (`###` is a three-digit counter within the Session).
   - `session_##/` also holds screenshots and any other attachments referenced from the log or bug reports, named semantically.
 
+IMPORTANT: **Write each file update immediately when content is ready.** Never batch or defer file writes. This will avoid losing information in case of context compaction.
+
 ## Cross-Session Memory
 
 Across Exploratory Test Sessions, you accumulate durable knowledge about the SUT in the `knowledge/` directory.  
 The purpose of this knowledge collection is to help you navigate and understand faster the SUT during future Sessions.  
-The format and update rules live in `knowledge/INSTRUCTIONS.md`.  
-You must read that file.
+The format and update rules live in `knowledge/INSTRUCTIONS.md`. You must read that file.
 
 ## Organization of the Exploratory Test Session
-
-If the user starts a brand-new Exploratory Test Session, start at Stage 1.
-
-In case the user asks for continuing a previous Exploratory Test Session:
-- If they ask for an extended test perimeter, start at Stage 1 with a new Session.
-- If they ask to continue the Session (either the last or one whose number is provided by the user), start at Stage 3.
 
 ### Stage 1 - Define the Exploratory Test Charter
 
@@ -40,7 +35,7 @@ Then, read `knowledge/index.md`. From its entries, open only the knowledge files
 
 If any information sources (User Documentation, User Stories, Bug Reports…) have been provided by the user, read them. If some of this provided information is unclear, contradictory (possibly with your knowledge files), incomplete… ask for clarification.
 
-Then, extract the durable facts about the SUT from these information sources into the relevant `knowledge/` files, tagged `documented` with the Session, date, and source name. Append new entries (a doc, a UI page…) rather than overwriting existing ones. Create new files and update `knowledge/index.md` as needed. Capture only stable knowledge about the SUT, not the Session-specific harter or checklist content.
+Then, extract the durable facts about the SUT from these information sources into the relevant `knowledge/` files, tagged `documented` with the Session, date, and source name. Append new entries (a doc, a UI page…) rather than overwriting existing ones. Create new files and update `knowledge/index.md` as needed. Capture only stable knowledge about the SUT, not the Session-specific Charter or checklist content.
 
 You must have the necessary information to be able to perform the test. Ask for information completion if this is not the case. Since this is about Exploratory Testing, it is acceptable that the test perimeter is more or less fuzzy. Everything else should be clearly stated.
 
@@ -60,9 +55,9 @@ Pick one of the tests to be performed in `session_##/checklist.md`.
 Perform the test.  
 Document each action and each check you perform at the end of `session_##/log.md`. The aim is that someone reading that file should be able to replay the test. Add screenshots where applicable, these screenshots should be recorded in the `session_##` directory, use semantic filenames. If you install and/or use any tool (e.g., a PDF parser), indicate them in the log file.
 
-While testing, the moment you confirm a durable fact about the SUT (a UI page where the entity is managed and how to reach it, a stable business rule, a documentation page URL plus summary, or a private backend API call the UI emitted) append it as a new entry to the relevant `knowledge/` file, tagged `observed` with the session and date. The same entity may gain several doc, UI-page, or endpoint entries across sessions; append, don't overwrite. Create new files and update `knowledge/index.md` as needed. This is distinct from `log.md`: put distilled, reusable facts in `knowledge/`, never session state or bugs.
+While testing, the moment you confirm a durable fact about the SUT (a UI page where the entity is managed and how to reach it, a stable business rule, or a private backend API call the UI emitted) append it as a new entry to the relevant `knowledge/` file, tagged `observed` with the session and date. The same entity may gain several UI pages, endpoint entries… across sessions; append, don't overwrite. Create new files and update `knowledge/index.md` as needed. This is distinct from `log.md`: put distilled, reusable facts in `knowledge/`, never session state or bugs.
 
-if you find something incorrect (not respecting what information sources or the user indicated) or dubious (not respecting what you would expect), apply the instructions of Stage 4.  
+If you find something incorrect (not respecting what information sources or the user indicated) or dubious (not respecting what you would expect), apply the instructions of Stage 4.  
 
 Once the test is performed, check the test's checkbox in `session_##/checklist.md`.  
 
@@ -74,7 +69,7 @@ If the behavior of the SUT is incorrect or dubious, you need to characterize it.
 Record at the end of `session_##/log.md` why you considered the SUT behavior as incorrect or dubious.
 
 You will need to
-- define what is the trigger and the perimeter of this behavior.  
+- define what is the trigger and the perimeter of this behavior;
 - analyze what could be the worse impact of this behavior: security vulnerability, data loss, data corruption, invisible unexpected data change…
 
 If the SquashTM server reports a 5XX error, you can access the log file using the `get-logs` skill. This may help you characterize the bad behavior trigger.
@@ -122,7 +117,7 @@ Provide the date and time of the test.
 Indicate the name of the model (LLM), the thinking level, and the name of the tool piloting the LLM.
 ```
 
-When an analysis clears a dubious behavior as actually expected, record the underlying rule in `knowledge/business-rules.md` (or the relevant entity file), tagged `observed` or `documented` with the Session and date, and update `knowledge/index.md` if you created a file. When you confirm a bug, it goes only to the bug report, never to `knowledge/`, since bugs are transient and may be fixed.
+When an analysis clears a dubious behavior as actually expected, record the underlying rule in `knowledge/business-rules.md` (or the relevant entity file), tagged `observed` with the Session and date, and update `knowledge/index.md` if you created a file. When you confirm a bug, it goes only to the bug report, never to `knowledge/`, since bugs are transient and may be fixed.
 
 Whatever the outcome, once the analysis of a behavior is complete, remove the ` <- CURRENTLY TESTING THIS` marker from that test (the most deeply nested one you opened) and check the boxes of the analysis tests you performed for it. Any ancestor tests keep their marker, since their own analysis is still ongoing; you finish unwinding them the same way as you climb back up.
 
@@ -135,7 +130,7 @@ When you have written 16 `bug_###.md` files, stop the Exploratory Testing Sessio
 
 ### Stage 5 - Consolidate Memory
 
-After the Session summary, do a cleanup pass over `knowledge/`:
+After the Session summary, do a cleanup pass over `knowledge/` (log each cleanup in `session_##/log.md`):
 - Merge only true duplicates: the same doc page, UI page, or endpoint recorded twice. Keep genuinely distinct entries (different pages, different endpoints) separate, each with its own Session/date.
 - Resolve contradictions (keep the newest, note the Session and date).
 - Promote `assumed` facts that got confirmed during the Session to `observed`.
@@ -147,7 +142,7 @@ After the Session summary, do a cleanup pass over `knowledge/`:
 
 A SquashTM instance is available at http://host.docker.internal:8090/squash/login. You can login as administrator using the credentials `admin` / `admin`.
 
-## Testing Rules
+### SUT Testing Rules
 
 - Interact with SquashTM UI using Playwright CLI. This one is already installed, see `playwright-cli` skill.
 - Do not try to access the public SquashTM REST API, only use the UI or the private API endpoints accessed by the web app.
