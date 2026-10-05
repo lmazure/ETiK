@@ -29,7 +29,7 @@ The labels `Type::Bug` and `ProdImpact::ToBeAnalyzed` are always set.
 
 - Must have the `.md` extension.
 - The first `# ` heading becomes the issue title and the rest becomes the description.
-- Local `.png` files referenced as `![alt](file.png)` or `<img src="file.png">` are uploaded. Their paths are relative to the Markdown file. A missing file aborts the run before anything is created.
+- Local `.png` files referenced as `![alt](file.png)` or `<img src="file.png">` are uploaded. A missing file aborts the run before anything is created.
 
 ## Output
 
@@ -39,7 +39,7 @@ The labels `Type::Bug` and `ProdImpact::ToBeAnalyzed` are always set.
 
 ## Rules
 
-- Creating an issue is visible to the whole team. Run the script only when the user explicitly asked to publish that bug.
+- Run the script only when the user explicitly asked to publish that bug.
 - Ask the user for the priority, and whether the bug is a security issue or a draft, when they did not say. Do not guess.
 - Run the script once per bug. Never rerun it after a success, because that would create a duplicate issue.
 - Give the user the issue URL printed by the script.
