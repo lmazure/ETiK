@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "deny": [
-      "Read(./notes.md)",
-      "Write(./notes.md)"
-    ]
-  }
-}
