@@ -59,6 +59,11 @@ const MIGRATIONS: string[] = [
   CREATE TRIGGER changesets_no_delete BEFORE DELETE ON changesets
     BEGIN SELECT RAISE(ABORT, 'changesets are append-only'); END;
   `,
+  // 2: change feed (changesets of a store, versions of a changeset)
+  `
+  CREATE INDEX changesets_by_store ON changesets(store, id);
+  CREATE INDEX versions_by_changeset ON versions(changeset_id);
+  `,
 ];
 
 export function openDatabase(file: string): DB {

@@ -33,8 +33,7 @@ describe("authentication", () => {
 
   it("keeps an agent token in its own store and out of admin routes", async () => {
     expect((await app.inject({ method: "GET", url: "/api/stores/other/list", headers: agent })).statusCode).toBe(403);
-    expect((await app.inject({ method: "GET", url: "/api/stores", headers: agent })).statusCode).toBe(403);
-    expect((await app.inject({ method: "GET", url: `${base}/deleted`, headers: agent })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: `${base}/restore`, headers: agent, payload: { doc_id: 1 } })).statusCode).toBe(403);
     expect((await app.inject({ method: "GET", url: "/api/stores/other/list", headers: { authorization: `Bearer ${OTHER_TOKEN}` } })).statusCode).toBe(200);
   });
 

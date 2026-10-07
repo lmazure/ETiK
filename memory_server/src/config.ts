@@ -8,11 +8,15 @@ export interface Config {
   port: number;
   dbPath: string;
   adminToken: string | undefined;
+  /** Read-only token for people (web app): reads every store, never writes. */
+  viewerToken: string | undefined;
   agentTokens: AgentToken[];
   /** Maximum size of one document, in UTF-8 bytes. */
   maxDocumentBytes: number;
   /** Maximum size of one MCP tool result, in characters; longer reads are truncated with a notice. */
   mcpMaxOutputChars: number;
+  /** Directory of the built web app; not served when missing. */
+  webRoot: string | undefined;
 }
 
 function integer(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
@@ -41,8 +45,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: integer(env, "PORT", 8080),
     dbPath: env.MEMORY_DB_PATH ?? "./data/memory.db",
     adminToken: env.MEMORY_ADMIN_TOKEN || undefined,
+    viewerToken: env.MEMORY_VIEWER_TOKEN || undefined,
     agentTokens: parseAgentTokens(env.MEMORY_AGENT_TOKENS),
     maxDocumentBytes: integer(env, "MEMORY_MAX_DOCUMENT_BYTES", 1024 * 1024),
     mcpMaxOutputChars: integer(env, "MEMORY_MCP_MAX_OUTPUT_CHARS", 40_000),
+    webRoot: env.MEMORY_WEB_ROOT || undefined,
   };
 }

@@ -8,6 +8,7 @@ import {
 export const ADMIN_TOKEN = "admin-secret";
 export const AGENT_TOKEN = "agent-secret";
 export const OTHER_TOKEN = "other-secret";
+export const VIEWER_TOKEN = "viewer-secret";
 
 export function testConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -15,9 +16,11 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     port: 0,
     dbPath: ":memory:",
     adminToken: ADMIN_TOKEN,
+    viewerToken: VIEWER_TOKEN,
     agentTokens: [{ store: "squashtm", token: AGENT_TOKEN }, { store: "other", token: OTHER_TOKEN }],
     maxDocumentBytes: 10_000,
     mcpMaxOutputChars: 2_000,
+    webRoot: undefined,
     ...overrides,
   };
 }

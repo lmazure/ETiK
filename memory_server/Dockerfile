@@ -1,4 +1,4 @@
-# Build stage: compile TypeScript, then keep only production dependencies.
+# Build stage: compile the server and build the web app (dist/web), then keep only production dependencies.
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 # Toolchain in case better-sqlite3 has no prebuilt binary for this platform.
@@ -6,8 +6,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 make g+
     && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY tsconfig.json tsconfig.build.json ./
+COPY tsconfig.json tsconfig.build.json vite.config.ts ./
 COPY src ./src
+COPY web ./web
 RUN npm run build && npm prune --omit=dev
 
 # Runtime stage.

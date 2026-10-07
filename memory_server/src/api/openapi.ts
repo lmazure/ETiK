@@ -10,6 +10,7 @@ const docPath = {
   name: "path", in: "path", required: true, schema: { type: "string" },
   description: "Document path without its leading '/', e.g. entities/requirement.md",
 };
+const docIdParam = { name: "id", in: "path", required: true, schema: { type: "integer" }, description: "Document id (stable across moves)" };
 const query = (name: string, type: string, description?: string) =>
   ({ name, in: "query", required: false, schema: { type }, ...(description && { description }) });
 const header = (name: string, description: string) =>
@@ -59,7 +60,29 @@ export function openApiDocument(): Record<string, unknown> {
     security: [{ bearer: [] }],
     paths: {
       "/api/stores": {
-        get: { summary: "List stores (admin)", responses: { "200": ok("Stores"), ...errors } },
+        get: { summary: "List the stores the token can reach", responses: { "200": ok("Stores"), ...errors } },
+      },
+      "/api/stores/{store}/changes": {
+        get: {
+          summary: "Change feed: changesets (one per write call or batch) with the document versions they created",
+          parameters: [store, query("since", "integer", "Changes after this changeset id, oldest first"),
+            query("before", "integer", "Changes before this changeset id, newest first (default: the latest)"),
+            query("limit", "integer")],
+          responses: { "200": ok("{latest, changes}: latest is the cursor to poll from"), ...errors },
+        },
+      },
+      "/api/stores/{store}/documents/{id}": {
+        get: { summary: "A document by id, live or deleted", parameters: [store, docIdParam],
+          responses: { "200": ok("Head state, with deleted flag"), ...errors } },
+      },
+      "/api/stores/{store}/documents/{id}/history": {
+        get: { summary: "Versions of a document by id, newest first (also for deleted documents)",
+          parameters: [store, docIdParam, query("limit", "integer")], responses: { "200": ok("Versions"), ...errors } },
+      },
+      "/api/stores/{store}/documents/{id}/versions/{version}": {
+        get: { summary: "One version of a document by id, with its content",
+          parameters: [store, docIdParam, { name: "version", in: "path", required: true, schema: { type: "integer" } }],
+          responses: { "200": ok("Version"), ...errors } },
       },
       "/api/stores/{store}/list": {
         get: {
@@ -114,7 +137,7 @@ export function openApiDocument(): Record<string, unknown> {
           responses: { "200": ok("Versions, newest first"), ...errors } },
       },
       "/api/stores/{store}/deleted": {
-        get: { summary: "List deleted documents (admin)", parameters: [store], responses: { "200": ok("Deleted documents"), ...errors } },
+        get: { summary: "List deleted documents", parameters: [store], responses: { "200": ok("Deleted documents"), ...errors } },
       },
       "/api/stores/{store}/restore": {
         post: { summary: "Restore a deleted document (admin)", parameters: [store, session], requestBody: jsonBody(restoreArgs),

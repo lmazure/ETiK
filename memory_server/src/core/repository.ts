@@ -36,6 +36,30 @@ export interface VersionEntry {
   changeset_id: number;
 }
 
+/** Head state of a document, live or deleted. */
+export interface DocInfo extends DocSummary {
+  deleted: boolean;
+}
+
+export interface ChangeItem {
+  doc_id: number;
+  path: string;
+  /** Path before this version, when it differs (moves). */
+  previous_path?: string;
+  version: number;
+  op: VersionOp;
+}
+
+/** One changeset: everything one tool call or batch changed. */
+export interface Change {
+  id: number;
+  created_at: string;
+  actor: string;
+  session: string | null;
+  change_note: string | null;
+  items: ChangeItem[];
+}
+
 export interface DeletedDoc {
   doc_id: number;
   path: string;
@@ -88,6 +112,15 @@ interface VersionRow {
   actor: string;
   session: string | null;
   changeset_id: number;
+}
+
+interface ChangeItemRow {
+  changeset_id: number;
+  doc_id: number;
+  path: string;
+  previous_path: string | null;
+  version: number;
+  op: VersionOp;
 }
 
 function toSummary(row: SummaryRow): DocSummary {
@@ -210,11 +243,62 @@ export class Repository {
     return row && toVersion(row);
   }
 
-  listVersions(docId: number, limit: number): VersionEntry[] {
+  /** Versions of a document, newest first, without their content. */
+  listVersions(docId: number, limit: number): Omit<VersionEntry, "content">[] {
     const rows = this.db.prepare(`
-      SELECT v.*, c.actor, c.session FROM versions v JOIN changesets c ON c.id = v.changeset_id
+      SELECT v.doc_id, v.version, v.changeset_id, v.op, v.path, '' AS content, v.description, v.tags, v.metadata,
+        v.size, v.change_note, v.created_at, c.actor, c.session
+      FROM versions v JOIN changesets c ON c.id = v.changeset_id
       WHERE v.doc_id = ? ORDER BY v.version DESC LIMIT ?`).all(docId, limit) as VersionRow[];
-    return rows.map(toVersion);
+    return rows.map((row) => {
+      const { content: _content, ...version } = toVersion(row);
+      return version;
+    });
+  }
+
+  /** A document by id, live or deleted, scoped to a store. */
+  getDocById(store: string, docId: number): DocInfo | undefined {
+    const row = this.db.prepare(`
+      SELECT ${HEAD_COLUMNS}, d.deleted FROM documents d
+      JOIN versions v ON v.doc_id = d.id AND v.version = d.head_version
+      WHERE d.store = ? AND d.id = ?`).get(store, docId) as (SummaryRow & { deleted: number }) | undefined;
+    return row && { ...toSummary(row), deleted: row.deleted === 1 };
+  }
+
+  /** Id of the last changeset of a store; 0 when there is none. */
+  latestChangesetId(store: string): number {
+    const row = this.db.prepare("SELECT max(id) AS id FROM changesets WHERE store = ?").get(store) as { id: number | null };
+    return row.id ?? 0;
+  }
+
+  /**
+   * Changesets with the versions they created. With `since`: the ones after it, oldest first;
+   * otherwise the ones before `before` (default: all), newest first.
+   */
+  listChanges(store: string, options: { since?: number | undefined; before?: number | undefined; limit: number }): Change[] {
+    const changesets = (options.since !== undefined
+      ? this.db.prepare(`
+          SELECT id, created_at, actor, session, change_note FROM changesets
+          WHERE store = ? AND id > ? ORDER BY id ASC LIMIT ?`).all(store, options.since, options.limit)
+      : this.db.prepare(`
+          SELECT id, created_at, actor, session, change_note FROM changesets
+          WHERE store = ? AND id < ? ORDER BY id DESC LIMIT ?`).all(store, options.before ?? Number.MAX_SAFE_INTEGER, options.limit)
+    ) as Omit<Change, "items">[];
+    if (changesets.length === 0) return [];
+    const ids = changesets.map((c) => c.id);
+    const items = this.db.prepare(`
+      SELECT v.changeset_id, v.doc_id, v.path, v.version, v.op,
+        (SELECT p.path FROM versions p WHERE p.doc_id = v.doc_id AND p.version = v.version - 1) AS previous_path
+      FROM versions v
+      WHERE v.changeset_id IN (${ids.map(() => "?").join(",")})
+      ORDER BY v.changeset_id, v.doc_id, v.version`).all(...ids) as ChangeItemRow[];
+    const byChangeset = new Map<number, ChangeItem[]>(ids.map((id) => [id, []]));
+    for (const { changeset_id, previous_path, ...item } of items) {
+      byChangeset.get(changeset_id)!.push(
+        previous_path !== null && previous_path !== item.path ? { ...item, previous_path } : item,
+      );
+    }
+    return changesets.map((c) => ({ ...c, items: byChangeset.get(c.id)! }));
   }
 
   countVersions(docId: number): number {

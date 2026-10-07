@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   deleteArgs, editArgs, moveArgs, writeArgs,
-  type BatchArgs, type BatchableTool, type DeleteArgs, type EditArgs, type HistoryArgs, type ListArgs, type MoveArgs,
+  type BatchArgs, type BatchableTool, type ChangesArgs, type DeleteArgs, type DocHistoryArgs, type DocVersionArgs, type EditArgs, type HistoryArgs, type ListArgs, type MoveArgs,
   type ReadArgs, type RestoreArgs, type SearchArgs, type WriteArgs,
 } from "../schemas.js";
 import type { DB } from "./db.js";
@@ -9,7 +9,9 @@ import { applyEdits, changedLines, normalizeTags, sameState, type ChangedLines, 
 import { MemoryError } from "./errors.js";
 import { enclosingHeading, normalizeNewlines, parseHeadings, requireSection, toLines } from "./markdown.js";
 import { ROOT, ancestorsOf, normalizeDocPath, normalizeFolderPath, rebase } from "./paths.js";
-import { Repository, type Doc, type DocSummary, type VersionOp } from "./repository.js";
+import { Repository, type Change, type Doc, type DocInfo, type DocSummary, type VersionOp } from "./repository.js";
+
+export type { Change, ChangeItem, DocInfo, VersionOp } from "./repository.js";
 
 /** Who is calling and on which store; set by the entry point from the credentials and headers, never by tool arguments. */
 export interface Context {
@@ -30,6 +32,7 @@ export interface FolderEntry {
 
 export interface DocumentEntry {
   type: "document";
+  id: number;
   path: string;
   version: number;
   size: number;
@@ -120,6 +123,35 @@ export interface HistoryResult {
   versions: HistoryEntry[];
 }
 
+export interface DocumentHistoryResult extends HistoryResult {
+  deleted: boolean;
+}
+
+export interface ChangesResult {
+  /** Id of the latest changeset of the store (0 when empty): the cursor to poll from. */
+  latest: number;
+  changes: Change[];
+}
+
+/** One stored version of a document, with its content. */
+export interface VersionResult {
+  doc_id: number;
+  version: number;
+  current_version: number;
+  deleted: boolean;
+  op: VersionOp;
+  path: string;
+  content: string;
+  description: string;
+  tags: string[];
+  metadata: Record<string, string>;
+  size: number;
+  created_at: string;
+  actor: string;
+  session: string | null;
+  change_note: string | null;
+}
+
 export interface RestoreResult {
   doc_id: number;
   path: string;
@@ -200,7 +232,7 @@ export class MemoryCore {
       }
       if (relative.length <= args.depth) {
         entries.push({
-          type: "document", path: doc.path, version: doc.version, size: doc.size,
+          type: "document", id: doc.id, path: doc.path, version: doc.version, size: doc.size,
           updated_at: doc.updated_at, tags: doc.tags, description: doc.description,
         });
       }
@@ -293,14 +325,41 @@ export class MemoryCore {
   history(ctx: Context, args: HistoryArgs): HistoryResult {
     validateStoreName(ctx.store);
     const path = normalizeDocPath(args.path);
-    const doc = this.requireDoc(ctx.store, path);
+    return this.historyOf(this.requireDoc(ctx.store, path), args.limit);
+  }
+
+  // ---------------------------------------------------------------- change feed and reads by id (web app)
+
+  changes(ctx: Context, args: ChangesArgs): ChangesResult {
+    validateStoreName(ctx.store);
     return {
-      path, doc_id: doc.id, current_version: doc.version, total: this.repo.countVersions(doc.id),
-      versions: this.repo.listVersions(doc.id, args.limit).map((v) => ({
-        version: v.version, op: v.op, path: v.path, created_at: v.created_at,
-        change_note: v.change_note, session: v.session, actor: v.actor, size: v.size,
-      })),
+      latest: this.repo.latestChangesetId(ctx.store),
+      changes: this.repo.listChanges(ctx.store, args),
     };
+  }
+
+  /** A document by id, live or deleted: ids stay valid across moves and deletions. */
+  documentById(ctx: Context, docId: number): DocInfo {
+    validateStoreName(ctx.store);
+    const doc = this.repo.getDocById(ctx.store, docId);
+    if (!doc) throw new MemoryError("NOT_FOUND", `Document ${docId} not found in store ${ctx.store}`, { doc_id: docId });
+    return doc;
+  }
+
+  historyById(ctx: Context, args: DocHistoryArgs): DocumentHistoryResult {
+    const doc = this.documentById(ctx, args.doc_id);
+    return { ...this.historyOf(doc, args.limit), deleted: doc.deleted };
+  }
+
+  versionById(ctx: Context, args: DocVersionArgs): VersionResult {
+    const doc = this.documentById(ctx, args.doc_id);
+    const version = this.repo.getVersion(doc.id, args.version);
+    if (!version) {
+      throw new MemoryError("NOT_FOUND", `Version ${args.version} of ${doc.path} does not exist; current version is ${doc.version}`,
+        { doc_id: doc.id, version: args.version, current_version: doc.version });
+    }
+    const { changeset_id: _changeset, ...rest } = version;
+    return { ...rest, current_version: doc.version, deleted: doc.deleted };
   }
 
   // ---------------------------------------------------------------- writes
@@ -397,6 +456,16 @@ export class MemoryCore {
       description: state.description, tags: state.tags, metadata: state.metadata,
       changeNote: changeNote ?? tx.changeNote, now: tx.now,
     });
+  }
+
+  private historyOf(doc: DocSummary, limit: number): HistoryResult {
+    return {
+      path: doc.path, doc_id: doc.id, current_version: doc.version, total: this.repo.countVersions(doc.id),
+      versions: this.repo.listVersions(doc.id, limit).map((v) => ({
+        version: v.version, op: v.op, path: v.path, created_at: v.created_at,
+        change_note: v.change_note, session: v.session, actor: v.actor, size: v.size,
+      })),
+    };
   }
 
   private requireDoc(store: string, path: string): Doc {

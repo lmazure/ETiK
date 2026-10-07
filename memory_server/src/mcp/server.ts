@@ -71,6 +71,7 @@ export function registerMcp(app: FastifyInstance, core: MemoryCore, auth: Authen
     let ctx: Context;
     try {
       const principal = auth.authenticate(request.headers.authorization);
+      if (principal.role === "viewer") throw new AuthError(403, "The viewer token is for people (web app and REST reads), not for MCP");
       ctx = auth.context(principal, headerValue(request.headers[STORE_HEADER]), headerValue(request.headers[SESSION_HEADER]));
     } catch (error) {
       if (error instanceof AuthError) {

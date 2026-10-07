@@ -5,6 +5,7 @@ One container exposes the same core through:
 
 - `/mcp`: MCP Streamable HTTP (stateless) with nine `memory_*` tools, for agents;
 - `/api`: a JSON REST API (OpenAPI at `/api/openapi.json`), for people and other clients;
+- `/`: a read-only web app to browse the memories, their history and what changes live;
 - `/health`: liveness, without authentication.
 
 ## Design choices
@@ -98,10 +99,11 @@ Deleting is a soft delete: the document leaves listings and its path is free aga
 The agent may run with full shell access (e.g. Claude Code in YOLO mode in a dev container). It can then read its own MCP configuration and call `/api` directly, so the design must hold even when MCP is bypassed:
 
 - Every rule is enforced in the core; the MCP and REST layers only translate and format.
-- An agent token reaches only its own store and no admin operation (list stores, list deleted documents, restore). People and the future web app use other credentials.
+- Three kinds of tokens: an **agent** token reaches only its own store, read and write, without admin operation (restore); the **viewer** token reads every store and never writes (meant for the web app; refused on `/mcp`); the **admin** token reaches everything.
 - Store and session come from headers set in the harness configuration, never from tool arguments; the core writes them into the history.
 - History and soft delete are the undo for a wrong deletion. Volume backups stay out of the agent's reach.
 - The memory host and port must be allowed in the dev container's firewall allowlist.
+- The web app shows content written by an agent that browses untrusted pages: HTML found in a memory is displayed as escaped text, never interpreted; a strict Content-Security-Policy forbids inline scripts and external resources.
 
 ## Run
 
@@ -116,11 +118,13 @@ Data is kept in the `memory-data` volume (`/data/memory.db`, SQLite).
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `MEMORY_ADMIN_TOKEN` | — | Token reaching every store and the admin routes |
+| `MEMORY_VIEWER_TOKEN` | — | Read-only token for every store, for the web app |
 | `MEMORY_AGENT_TOKENS` | — | `store=token,store=token`; an agent token reaches only its store(s) |
 | `MEMORY_DB_PATH` | `/data/memory.db` in the image | SQLite file |
 | `PORT` / `HOST` | `8080` / `0.0.0.0` | Listening address |
 | `MEMORY_MAX_DOCUMENT_BYTES` | `1048576` | Maximum size of one document |
 | `MEMORY_MCP_MAX_OUTPUT_CHARS` | `40000` | MCP read results beyond this are truncated with a notice |
+| `MEMORY_WEB_ROOT` | `dist/web` next to the server | Built web app; not served when absent |
 | `LOG_LEVEL` | `info` | Fastify log level |
 
 At least one token must be set, otherwise the server refuses to start.
@@ -167,9 +171,32 @@ curl "${H[@]}" $B/history/entities/requirement.md
 | `memory_delete` | `DELETE /api/stores/{store}/docs/{path}?recursive=` |
 | `memory_batch` | `POST /api/stores/{store}/batch` |
 | `memory_history` | `GET /api/stores/{store}/history/{path}` |
-| (admin) | `GET /api/stores`, `GET /api/stores/{store}/deleted`, `POST /api/stores/{store}/restore` |
+| (any token) | `GET /api/stores`: the stores the token reaches |
+| (any token) | `GET /api/stores/{store}/changes?since=\|before=&limit=`: change feed, `{latest, changes}`; each change is one write call or batch with the versions it created |
+| (any token) | `GET /api/stores/{store}/documents/{id}`, `…/documents/{id}/history`, `…/documents/{id}/versions/{version}`: reads by document id, which stays valid across moves and deletion |
+| (any token) | `GET /api/stores/{store}/deleted`: deleted documents |
+| (admin) | `POST /api/stores/{store}/restore` |
 
-Errors are `{"error": {"code", "message", "details"}}`: 400 invalid arguments or path, 401 missing or unknown token, 403 forbidden store or admin route, 404 not found, 409 already exists or is a folder, 412 version conflict, 413 too large, 422 edit failure (`old_str` absent or not unique, section missing or duplicated), 501 unsupported search mode.
+Errors are `{"error": {"code", "message", "details"}}`: 400 invalid arguments or path, 401 missing or unknown token, 403 forbidden store, admin route, or write with the viewer token, 404 not found, 409 already exists or is a folder, 412 version conflict, 413 too large, 422 edit failure (`old_str` absent or not unique, section missing or duplicated), 501 unsupported search mode.
+
+## Web app
+
+Open `http://localhost:8080/` and paste the viewer token (it stays in the tab, or in the browser if you tick "Remember").
+
+- **Documents** (left): the folder tree with each document's description; filter by path, description or tag. Deleted documents are listed apart, their history stays readable.
+- **Document** (center): one version, rendered Markdown or raw numbered lines, with its metadata and who changed it (actor, session, change note).
+- **History** (right): every version of the open document; open any version, diff it with the previous one, or tick two versions and compare them.
+- **Diff**: path, description, tags and metadata changes, then a line diff with folded unchanged parts.
+- **Activity** (left tab): the store's changes, newest first, one entry per write call or batch; a click opens the diff introduced.
+- **Search** (top): keyword search; a hit opens the document at the matching line.
+
+While the page is open, it checks the change feed every 3 seconds (30 s when the tab is hidden). New changes are **announced, never applied to what you are reading**:
+
+- the tree marks documents changed (●), new, moved or deleted since the page was loaded, and their folders;
+- the Activity tab and the History panel list the new versions, highlighted;
+- the open document keeps its content; a banner says that a newer version exists and links to it and to the diff.
+
+Reload the page to start from the current state again. Links are shareable (`#/s/{store}/doc/{id}?v=3`, `#/s/{store}/diff/{id}/3..5`).
 
 ## Mapping the current knowledge-base rules onto the tools
 
@@ -196,7 +223,7 @@ The instructions keep everything that is policy: the schema of an entity documen
 
 - Wiring into the test dev container: MCP registration, firewall allowlist, rewriting `CLAUDE.md` and `knowledge/INSTRUCTIONS.md` to use the tools.
 - Semantic and hybrid search (embeddings).
-- Web app to browse, search and compare versions.
+- Web app actions: editing, restoring a version or a deleted document (the app is read-only).
 - A CLI on `/api` for harnesses without MCP (e.g. Pi), with no change to the core or the tool definitions.
 - If a single tool is preferred over nine: one `memory` tool with a `command` enum, keeping Anthropic's command names (`view`, `create`, `str_replace`, `insert`, `delete`, `rename`) and adding `search`, `append`, `replace_section`, `set_metadata`, `batch`, `history`.
 
@@ -206,9 +233,19 @@ Requires Node 24.
 
 ```bash
 npm install
-npm test           # unit tests (core) + REST (fastify.inject) + MCP (SDK client over HTTP)
-npm run typecheck
-MEMORY_ADMIN_TOKEN=dev MEMORY_DB_PATH=./data/memory.db npm run dev
+npm test           # core, REST, MCP (SDK client over HTTP), web app logic and Markdown rendering
+npm run typecheck  # server and web app
+npm run build      # server into dist/, web app into dist/web
+MEMORY_ADMIN_TOKEN=dev MEMORY_VIEWER_TOKEN=view MEMORY_DB_PATH=./data/memory.db npm run dev
+npm run dev:web    # web app with hot reload on http://localhost:5173, proxying /api to the server
 ```
 
-Layout: `src/schemas.ts` holds the tool schemas (single source for MCP, REST validation and OpenAPI); `src/core/` holds every rule (`memory-core.ts`) on top of SQLite (`db.ts`, `repository.ts`); `src/api/` and `src/mcp/` only translate and format.
+End-to-end tests of the web app (Playwright, against the built server on an in-memory database). Chromium needs system libraries, so the simplest is the Playwright image:
+
+```bash
+npm run build
+docker run --rm --network host -v "$PWD":/app -w /app -u "$(id -u):$(id -g)" -e HOME=/tmp \
+  mcr.microsoft.com/playwright:v1.63.0-noble npx playwright test
+```
+
+Layout: `src/schemas.ts` holds the tool schemas (single source for MCP, REST validation and OpenAPI); `src/core/` holds every rule (`memory-core.ts`) on top of SQLite (`db.ts`, `repository.ts`); `src/api/` and `src/mcp/` only translate and format. The web app is in `web/` (Preact, Vite): pure logic in `web/src/{tree,routes,diffs,markdown}.ts`, components in `web/src/components/`.

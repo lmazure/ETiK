@@ -131,6 +131,26 @@ export const restoreArgs = z.object({
   change_note: changeNote,
 });
 
+export const changesArgs = z.object({
+  since: z.number().int().min(0).optional().describe("Changes after this changeset id, oldest first."),
+  before: z.number().int().min(1).optional().describe("Changes before this changeset id, newest first (default: the latest)."),
+  limit: z.number().int().min(1).max(500).default(100),
+}).refine((args) => args.since === undefined || args.before === undefined, { message: "Give since or before, not both" });
+
+const docId = z.number().int().min(1);
+
+export const docIdArgs = z.object({ doc_id: docId });
+
+export const docVersionArgs = z.object({
+  doc_id: docId,
+  version: z.number().int().min(1),
+});
+
+export const docHistoryArgs = z.object({
+  doc_id: docId,
+  limit: z.number().int().min(1).max(500).default(100),
+});
+
 export type ListArgs = z.infer<typeof listArgs>;
 export type ReadArgs = z.infer<typeof readArgs>;
 export type SearchArgs = z.infer<typeof searchArgs>;
@@ -142,6 +162,9 @@ export type DeleteArgs = z.infer<typeof deleteArgs>;
 export type BatchArgs = z.infer<typeof batchArgs>;
 export type HistoryArgs = z.infer<typeof historyArgs>;
 export type RestoreArgs = z.infer<typeof restoreArgs>;
+export type ChangesArgs = z.infer<typeof changesArgs>;
+export type DocVersionArgs = z.infer<typeof docVersionArgs>;
+export type DocHistoryArgs = z.infer<typeof docHistoryArgs>;
 export type BatchableTool = (typeof batchableTools)[number];
 
 export const tools = {

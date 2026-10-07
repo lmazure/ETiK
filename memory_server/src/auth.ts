@@ -5,8 +5,13 @@ import { validateStoreName, type Context } from "./core/memory-core.js";
 
 export interface Principal {
   name: string;
-  role: "admin" | "agent";
-  /** Stores an agent may reach; an admin reaches every store. */
+  /**
+   * admin: every store, read and write, admin operations.
+   * viewer: every store, read only (people, web app).
+   * agent: its own store(s), read and write.
+   */
+  role: "admin" | "viewer" | "agent";
+  /** Stores an agent may reach; admin and viewer reach every store. */
   stores: string[];
 }
 
@@ -25,23 +30,27 @@ export const SESSION_HEADER = "x-memory-session";
 
 /**
  * Static bearer tokens. An agent token reaches only its own store(s) and no admin operation;
- * the admin token reaches every store and the admin operations.
+ * the viewer token reads every store and never writes; the admin token reaches everything.
  */
 export class Authenticator {
   private readonly entries: { digest: Buffer; principal: Principal }[] = [];
 
-  constructor(config: Pick<Config, "adminToken" | "agentTokens">) {
-    if (config.adminToken) {
-      this.entries.push({ digest: digest(config.adminToken), principal: { name: "admin", role: "admin", stores: [] } });
-    }
+  constructor(config: Pick<Config, "adminToken" | "viewerToken" | "agentTokens">) {
+    const seen = new Set<string>();
+    const add = (token: string, principal: Principal) => {
+      if (seen.has(token)) throw new Error("The admin, viewer and agent tokens must all differ");
+      seen.add(token);
+      this.entries.push({ digest: digest(token), principal });
+    };
+    if (config.adminToken) add(config.adminToken, { name: "admin", role: "admin", stores: [] });
+    if (config.viewerToken) add(config.viewerToken, { name: "viewer", role: "viewer", stores: [] });
     const byToken = new Map<string, string[]>();
     for (const { store, token } of config.agentTokens) {
       validateStoreName(store);
       byToken.set(token, [...(byToken.get(token) ?? []), store]);
     }
     for (const [token, stores] of byToken) {
-      if (config.adminToken && token === config.adminToken) throw new Error("An agent token must differ from the admin token");
-      this.entries.push({ digest: digest(token), principal: { name: `agent:${stores.join("+")}`, role: "agent", stores } });
+      add(token, { name: `agent:${stores.join("+")}`, role: "agent", stores });
     }
   }
 
@@ -67,6 +76,15 @@ export class Authenticator {
     if (principal.role !== "admin") throw new AuthError(403, "This operation requires the admin token");
   }
 
+  requireWriter(principal: Principal): void {
+    if (principal.role === "viewer") throw new AuthError(403, "The viewer token is read-only");
+  }
+
+  /** Whether the principal may reach a store (admin and viewer reach every store). */
+  canAccess(principal: Principal, store: string): boolean {
+    return principal.role !== "agent" || principal.stores.includes(store);
+  }
+
   /** Builds the core context for a store; the store must be reachable by the principal. */
   context(principal: Principal, store: string | undefined, session: string | undefined): Context {
     let resolved = store;
@@ -75,7 +93,7 @@ export class Authenticator {
       else throw new MemoryError("INVALID_ARGUMENT", `No store selected; set the ${STORE_HEADER} header`);
     }
     validateStoreName(resolved);
-    if (principal.role !== "admin" && !principal.stores.includes(resolved)) {
+    if (!this.canAccess(principal, resolved)) {
       throw new AuthError(403, `This token cannot access store '${resolved}'`);
     }
     return { store: resolved, actor: principal.name, session: session || undefined };
