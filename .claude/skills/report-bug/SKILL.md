@@ -1,6 +1,6 @@
 ---
 name: report-bug
-description: Publish a bug report Markdown file as an issue in the SquashTM staging GitLab project, uploading its PNG screenshots. Use only when the user explicitly asks to create a GitLab issue for a bug (e.g. "publish/file/report bug_003 in GitLab").
+description: Publish a bug report Markdown file as an issue in the SquashTM staging GitLab project, uploading its PNG screenshots and WebM videos. Use only when the user explicitly asks to create a GitLab issue for a bug (e.g. "publish/file/report bug_003 in GitLab").
 allowed-tools: Bash(node .claude/skills/report-bug/scripts/report-bug.mjs:*)
 ---
 
@@ -29,7 +29,7 @@ The labels `Type::Bug` and `ProdImpact::ToBeAnalyzed` are always set.
 
 - Must have the `.md` extension.
 - The first `# ` heading becomes the issue title and the rest becomes the description.
-- Local `.png` files referenced as `![alt](file.png)` or `<img src="file.png">` are uploaded. A missing file aborts the run before anything is created.
+- Local `.png` and `.webm` files referenced as `![alt](file.png)`, `<img src="file.png">` or `<video src="file.webm">` are uploaded. GitLab renders `![alt](file.webm)` as an inline video player. A missing file aborts the run before anything is created.
 
 ## Output
 
