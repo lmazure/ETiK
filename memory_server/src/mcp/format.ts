@@ -1,6 +1,6 @@
 /**
  * Text results for the model: compact, numbered lines, explicit truncation, actionable errors.
- * Formats follow the "Results" table of the interface study.
+ * See the "Results" section of the README.
  */
 import type { ChangedLines } from "../core/edits.js";
 import { MemoryError } from "../core/errors.js";

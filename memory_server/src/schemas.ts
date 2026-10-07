@@ -1,7 +1,7 @@
 /**
  * Input schemas of the memory tools: the single source of truth for the MCP tool list,
  * the REST request validation and the OpenAPI document.
- * Names, parameters and descriptions follow "Memory Toolsets for LLM Agents — Interface Study", section 6.
+ * Parameter names reuse those of Anthropic's memory tool (path, old_str, new_str, insert_line, view_range…).
  */
 import { z } from "zod";
 
