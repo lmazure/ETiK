@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { release } from "os";
-import { basename, dirname, resolve } from "path";
+import { basename, dirname, extname, resolve } from "path";
 import { parseArgs } from "util";
 
 const GITLAB_URL = "https://gitlab.com";
@@ -10,8 +10,10 @@ const PRIORITIES = ["Highest", "High", "Medium", "Low", "Lowest"];
 
 const USAGE = "Usage: report-bug.mjs <file.md> --priority <Highest|High|Medium|Low|Lowest> [--security] [--draft] [--display]";
 
-const MD_IMAGE_RE  = /(!\[[^\]]*\]\(\s*)(<[^>]+>|[^\s)]+)((?:\s+"[^"]*")?\s*\))/g;
-const HTML_IMAGE_RE = /(<img\b[^>]*?\bsrc\s*=\s*)(["'])(.*?)\2/gi;
+const MEDIA_TYPES = { ".png": "image/png", ".webm": "video/webm" };
+
+const MD_MEDIA_RE   = /(!?\[[^\]]*\]\(\s*)(<[^>]+>|[^\s)]+)((?:\s+"[^"]*")?\s*\))/g;
+const HTML_MEDIA_RE = /(<(?:img|video|source)\b[^>]*?\bsrc\s*=\s*)(["'])(.*?)\2/gi;
 
 function fail(message) {
   throw new Error(message);
@@ -58,38 +60,38 @@ function splitTitle(markdown, file) {
   return { title: match[1].trim(), body: before + after };
 }
 
-function localPngPath(target, baseDir) {
+function localMediaPath(target, baseDir) {
   const raw = target.startsWith("<") && target.endsWith(">") ? target.slice(1, -1) : target;
   if (/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith("/")) return null;
   const path = decodeURIComponent(raw.split(/[?#]/)[0]);
-  if (!path.toLowerCase().endsWith(".png")) return null;
+  if (!(extname(path).toLowerCase() in MEDIA_TYPES)) return null;
   return resolve(baseDir, path);
 }
 
-function collectPngs(body, baseDir) {
+function collectMedia(body, baseDir) {
   const paths = new Set();
-  for (const m of body.matchAll(MD_IMAGE_RE)) {
-    const p = localPngPath(m[2], baseDir);
+  for (const m of body.matchAll(MD_MEDIA_RE)) {
+    const p = localMediaPath(m[2], baseDir);
     if (p) paths.add(p);
   }
-  for (const m of body.matchAll(HTML_IMAGE_RE)) {
-    const p = localPngPath(m[3], baseDir);
+  for (const m of body.matchAll(HTML_MEDIA_RE)) {
+    const p = localMediaPath(m[3], baseDir);
     if (p) paths.add(p);
   }
   for (const p of paths) {
-    if (!existsSync(p)) fail(`referenced screenshot not found: ${p}`);
+    if (!existsSync(p)) fail(`referenced file not found: ${p}`);
   }
   return [...paths];
 }
 
-function replacePngs(body, baseDir, urls) {
+function replaceMedia(body, baseDir, urls) {
   return body
-    .replace(MD_IMAGE_RE, (all, pre, target, post) => {
-      const p = localPngPath(target, baseDir);
+    .replace(MD_MEDIA_RE, (all, pre, target, post) => {
+      const p = localMediaPath(target, baseDir);
       return p ? `${pre}${urls.get(p)}${post}` : all;
     })
-    .replace(HTML_IMAGE_RE, (all, pre, quote, target) => {
-      const p = localPngPath(target, baseDir);
+    .replace(HTML_MEDIA_RE, (all, pre, quote, target) => {
+      const p = localMediaPath(target, baseDir);
       return p ? `${pre}${quote}${urls.get(p)}${quote}` : all;
     });
 }
@@ -117,9 +119,9 @@ async function gitlab(token, method, path, body) {
   return json;
 }
 
-async function uploadPng(token, projectPath, file) {
+async function uploadMedia(token, projectPath, file) {
   const form = new FormData();
-  form.append("file", new Blob([readFileSync(file)], { type: "image/png" }), basename(file));
+  form.append("file", new Blob([readFileSync(file)], { type: MEDIA_TYPES[extname(file).toLowerCase()] }), basename(file));
   const { url } = await gitlab(token, "POST", `/projects/${projectPath}/uploads`, form);
   return url;
 }
@@ -168,7 +170,7 @@ try {
   const opts = parseCli();
   const baseDir = dirname(resolve(opts.file));
   const { title, body } = splitTitle(readFileSync(opts.file, "utf-8"), opts.file);
-  const pngs = collectPngs(body, baseDir);
+  const media = collectMedia(body, baseDir);
 
   const labels = [
     "Type::Bug",
@@ -180,11 +182,11 @@ try {
 
   const projectPath = encodeURIComponent(PROJECT);
   const urls = new Map();
-  for (const png of pngs) {
-    urls.set(png, await uploadPng(opts.token, projectPath, png));
+  for (const file of media) {
+    urls.set(file, await uploadMedia(opts.token, projectPath, file));
   }
 
-  const description = `${replacePngs(body, baseDir, urls).trimEnd()}\n\n${quickActions(labels, opts)}\n`;
+  const description = `${replaceMedia(body, baseDir, urls).trimEnd()}\n\n${quickActions(labels, opts)}\n`;
   const issue = await gitlab(opts.token, "POST", `/projects/${projectPath}/issues`,
     JSON.stringify({ title, description }));
 
