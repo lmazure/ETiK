@@ -12,7 +12,7 @@ const USAGE = "Usage: report-bug.mjs <file.md> --priority <Highest|High|Medium|L
 
 const MEDIA_TYPES = { ".png": "image/png", ".webm": "video/webm" };
 
-const MD_MEDIA_RE   = /(!\[[^\]]*\]\(\s*)(<[^>]+>|[^\s)]+)((?:\s+"[^"]*")?\s*\))/g;
+const MD_MEDIA_RE   = /(!?\[[^\]]*\]\(\s*)(<[^>]+>|[^\s)]+)((?:\s+"[^"]*")?\s*\))/g;
 const HTML_MEDIA_RE = /(<(?:img|video|source)\b[^>]*?\bsrc\s*=\s*)(["'])(.*?)\2/gi;
 
 function fail(message) {

@@ -29,7 +29,7 @@ The labels `Type::Bug` and `ProdImpact::ToBeAnalyzed` are always set.
 
 - Must have the `.md` extension.
 - The first `# ` heading becomes the issue title and the rest becomes the description.
-- Local `.png` and `.webm` files referenced as `![alt](file.png)`, `<img src="file.png">` or `<video src="file.webm">` are uploaded. GitLab renders `![alt](file.webm)` as an inline video player. A missing file aborts the run before anything is created.
+- Local `.png` and `.webm` files referenced as `![alt](file.png)`, `[text](file.webm)`, `<img src="file.png">` or `<video src="file.webm">` are uploaded. GitLab renders `![alt](file.webm)` as an inline video player. A missing file aborts the run before anything is created.
 
 ## Output
 
