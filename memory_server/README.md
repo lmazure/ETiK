@@ -198,30 +198,17 @@ While the page is open, it checks the change feed every 3 seconds (30 s when the
 
 Reload the page to start from the current state again. Links are shareable (`#/s/{store}/doc/{id}?v=3`, `#/s/{store}/diff/{id}/3..5`).
 
-## Mapping the current knowledge-base rules onto the tools
+## Use in the test environment
 
-The test environment currently keeps its knowledge as files in `test_environment/knowledge/`. Each of its rules maps onto one or two calls; only the wording of the instructions changes ("file" becomes "memory document").
+The test dev container (`../test_environment/`) uses the store `squashtm`:
 
-| Current rule | Calls |
-| --- | --- |
-| Load `index.md` every session | `memory_read(path="/index.md")`, or drop the file and call `memory_list(path="/", depth=2)`, which returns each document's description |
-| Open only the relevant files | `memory_read(path, section?)`; `memory_search(query, path_prefix="/entities")` when the name is unknown |
-| New entity file and its index row in the same step | `memory_batch([memory_write(create "/entities/x.md"), memory_edit("/index.md", append)])` |
-| Capture: append an entry to `## UI pages` | `memory_edit(path, [{op:"append", section:"## UI pages", create_section:true, text:"- Page URL: …"}])` |
-| Check before capturing (no duplicate page or endpoint) | `memory_search(query="/backend/requirements")` |
-| Source tags `observed, session_03, 2026-06-24` | Kept in the text, as today; optionally also `set_metadata`, and the session is recorded automatically from the header |
-| Consolidate: list all `assumed` facts | `memory_search(query="assumed,")` |
-| Promote `assumed` → `observed` | `memory_edit` with `str_replace` on the exact entry |
-| Merge true duplicates, rewrite a section | `memory_read` (gets the version) → `memory_edit(replace_section, if_version)` or `memory_write(overwrite, if_version)` |
-| Prune dead ends | `memory_edit(str_replace, new_str="")` or `memory_delete` |
-| Verify `index.md` matches the folder | `memory_list` compared with `memory_read("/index.md")` |
-| Trace a fact back to its session | `memory_history(path)` shows which session changed what |
-
-The instructions keep everything that is policy: the schema of an entity document, the tag format, when to capture and when to consolidate.
+- `.mcp.json` registers `/mcp` for Claude Code, with the agent token, the store and the session taken from the environment (`MEMORY_AGENT_TOKEN`, `MEMORY_STORE`, `MEMORY_SESSION`; `MEMORY_URL` defaults to `http://host.docker.internal:8080`).
+- `start-session.sh` reads the token from `memory.env`, checks that the server answers and accepts it, creates the next `session_##` directory and starts Claude Code with `MEMORY_SESSION` set to its name, so every change is recorded with its Exploratory Test Session.
+- `.devcontainer/init-firewall.sh` allows the memory server's host port.
+- `knowledge/INSTRUCTIONS.md` is the policy (documents, entity schema, source tags, capture and consolidation) expressed with the tools. There is no index document: `memory_list` returns each document's description.
 
 ## Not done yet
 
-- Wiring into the test dev container: MCP registration, firewall allowlist, rewriting `CLAUDE.md` and `knowledge/INSTRUCTIONS.md` to use the tools.
 - Semantic and hybrid search (embeddings).
 - Web app actions: editing, restoring a version or a deleted document (the app is read-only).
 - A CLI on `/api` for harnesses without MCP (e.g. Pi), with no change to the core or the tool definitions.

@@ -1,18 +1,37 @@
 # SUT Knowledge Base — Format and Rules
 
-This directory is a durable, cross-Session memory about the SUT. It is intentionally **tool-neutral**: these rules describe plain Markdown files on disk, so any tool can load and update them.
+The knowledge base is a durable, cross-Session memory about the SUT. It lives in the **memory server**, in the store `squashtm`, and is reached **only** through the `memory_*` tools (`memory_list`, `memory_read`, `memory_search`, `memory_write`, `memory_edit`, `memory_move`, `memory_delete`, `memory_batch`, `memory_history`). It is a set of Markdown **documents** addressed by path (e.g. `/entities/requirement.md`).
+
+The memory server keeps every version of every document and records, for each change, the Session that made it (the launcher sends `$MEMORY_SESSION` with every call) and its `change_note`. Nothing is ever lost: an overwritten passage or a deleted document can always be found in the history. People watch the knowledge base live in the memory server's web app.
+
+Never keep SUT knowledge in local files, and never fall back to local files: if the `memory_*` tools are missing or report that the server is unreachable, tell the user and stop.
 
 ## What this is — and is not
 
 - **Is:** distilled, deduplicated, reusable truth about the SUT — how features are reached in the UI, stable business rules, documentation pages, private backend API calls the web app emits.
-- **Is not:** a Session log. A Session's `log.md` is a replay trace of one run. Knowledge files are the curated facts extracted from many runs.
+- **Is not:** a Session log. A Session's `log.md` is a replay trace of one run. Knowledge documents are the curated facts extracted from many runs.
 - **Never** store here: Session-specific Charter/checklist content or bug reports (they are transient and may be fixed).
 
-## How loading works — index first, then only what's relevant
+## How loading works — list first, then only what's relevant
 
-`index.md` is the **only** file loaded every Session. It is a compact table of pointers — one line per file, never facts. The model reads `index.md`, then opens **only** the files relevant to the current charter/test. Never bulk-read this folder.
+There is no index document: every document carries a one-line `description` stating its scope, and `memory_list(path="/", depth=5)` returns path, description and tags of every document. Call it at the start of each Session; it is the index.
 
-When a new knowledge file is created, its row must be added to `index.md` in the same step. When facts are only added to an existing file, the index is left alone unless that file's one-line scope changed.
+Then read **only** the documents relevant to the current charter/test with `memory_read`; for a large document, read only the section you need (`section="## UI pages"`). When you do not know which document holds something, use `memory_search` (e.g. a page URL, an endpoint, an entity name). Never read every document.
+
+## Documents
+
+- `/entities/<entity>.md` — one document per business entity (lowercase, hyphenated name, e.g. `/entities/test-case.md`), tag `entity`, following the entity document schema below.
+- `/business-rules.md` — cross-cutting rules that span more than one entity, tag `cross-cutting`. Create it the first time such a rule is captured, with this content:
+
+  ```markdown
+  # Cross-cutting Business Rules
+
+  Rules that span more than one entity. Entity-specific rules live in that entity's document under `/entities/`.
+
+  ## Business rules
+  ```
+
+- Every document is created with a `description`: one line stating its scope (e.g. `Requirement entity: docs, UI pages, private API, rules`). Keep it accurate when the content changes (`memory_edit` with `set_metadata`).
 
 ## Source tags
 
@@ -23,12 +42,12 @@ Every fact carries a tag so the memory can be trusted and curated:
 - `assumed` — an unverified inference. Must be re-checked before being relied upon.
 
 Always record the **Session** and **date**, plus — for `documented` — the source name.
-Format: `<tag>, session_##, YYYY-MM-DD[, <source name>]` (e.g. `observed, session_03, 2026-06-24`).
-The Session lets you trace a fact back to its `session_##/log.md` for the full context.
+Format: `<tag>, session_##, YYYY-MM-DD[, <source name>]` (e.g. `observed, session_03, 2026-06-24`), where `session_##` is the current Session (`$MEMORY_SESSION`).
+The Session lets you trace a fact back to its `session_##/log.md` for the full context; `memory_history` also shows which Session changed what.
 
-## Entity file schema
+## Entity document schema
 
-One file per business entity under `entities/`. Use these exact headings so the model always knows where to read and where to write. Each section is a **growing list of entries** — there can be several docs, several UI pages, and several API endpoints, and new ones may be discovered in different Sessions. **Append** a new entry rather than overwriting; never collapse distinct items into one. Omit a section only while it has no entries yet.
+Use these exact headings so you always know where to read and where to write. Each section is a **growing list of entries** — there can be several docs, several UI pages, and several API endpoints, and new ones may be discovered in different Sessions. **Append** a new entry rather than overwriting; never collapse distinct items into one. Omit a section only while it has no entries yet.
 
 ```markdown
 # Entity: <Name>
@@ -70,9 +89,21 @@ One file per business entity under `entities/`. Use these exact headings so the 
 - <thing guessed but not yet confirmed>
 ```
 
-Cross-cutting rules that span entities go in `business-rules.md` using the same `## Business rules` / source-tag conventions.
+Cross-cutting rules go in `/business-rules.md` using the same `## Business rules` / source-tag conventions.
 
 ## Update protocol (two phases)
 
-1. **Capture — continuously, append-only.** The moment a durable fact is confirmed (from a provided source in Stage 1, or during testing in Stage 3/4), append it to the relevant file with a source tag, Session, and date. Create files and update `index.md` as needed. Capture is cheap and resists Session crashes.
-2. **Consolidate — periodically (end of Session, Stage 5).** Merge only true duplicates (the same doc/page/endpoint recorded twice) while keeping genuinely distinct entries separate; resolve contradictions (keep newest, note Session and date); promote confirmed `assumed` facts to `observed`; prune dead ends; and verify `index.md` matches the folder (one row per file, no orphans, accurate scope lines).
+Give every change a short `change_note` saying why it is made (e.g. `Requirement creation page observed`), like a commit message.
+
+1. **Capture — continuously, append-only.** The moment a durable fact is confirmed (from a provided source in Stage 1, or during testing in Stage 3/4), record it with a source tag, Session, and date. Capture is cheap and resists Session crashes.
+   - First check that it is not already recorded: `memory_search` for the page URL, the endpoint path, or the rule's key words.
+   - Add an entry to an existing document with `memory_edit`, operation `{"op": "append", "section": "## UI pages", "create_section": true, "text": "- Page URL: …"}` (no need to read the document first).
+   - Create a new entity document with `memory_write` (mode `create`, a `description`, tags `["entity"]`), with the schema headings that already have entries.
+2. **Consolidate — periodically (end of Session, Stage 5).**
+   - Merge only true duplicates (the same doc/page/endpoint recorded twice) while keeping genuinely distinct entries separate.
+   - Resolve contradictions (keep newest, note Session and date).
+   - Promote confirmed `assumed` facts to `observed`: find them with `memory_search(query="assumed,")`, then `memory_edit` with `str_replace` on the exact entry.
+   - Prune dead ends and anything that turned out wrong: `memory_edit` with `str_replace` and an empty `new_str`, or `memory_delete` for a whole document. The history keeps the removed text.
+   - To rewrite a section or a document, `memory_read` it first (the result gives its version), then `memory_edit` with `replace_section` or `memory_write` with mode `overwrite`, passing `if_version`. On a `VERSION_CONFLICT` error, read it again and redo the change on the new content.
+   - A change spanning several documents (e.g. moving a rule from an entity document to `/business-rules.md`) goes in one `memory_batch`, so it is applied entirely or not at all. Rename a document with `memory_move`.
+   - Finally, check with `memory_list` that every document's description still matches its content and that each document has the right tags; fix them with `set_metadata`.

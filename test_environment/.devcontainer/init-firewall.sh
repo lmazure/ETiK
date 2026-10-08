@@ -13,6 +13,11 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# Ports reachable on the Docker host gateway (host.docker.internal): SquashTM, memory server.
+# Keep them in sync with the SUT URL in CLAUDE.md and MEMORY_URL in memory.env.
+HOST_PORTS=(8090 8080)
+MEMORY_HEALTH_URL="http://host.docker.internal:8080/health"
+
 echo "== Applying egress allowlist =="
 
 # ---------------------------------------------------------------------------
@@ -74,12 +79,15 @@ for domain in \
 done
 
 # ---------------------------------------------------------------------------
-# 3. Allow the Docker host gateway (the app-under-test on a host port)
+# 3. Allow the Docker host gateway, only on HOST_PORTS (the app-under-test and
+#    the memory server on host ports)
 # ---------------------------------------------------------------------------
 HOST_GATEWAY=$(getent hosts host.docker.internal | awk '{print $1}' | head -n1 || true)
 if [ -n "${HOST_GATEWAY:-}" ]; then
-    echo "Allowing host gateway $HOST_GATEWAY (host.docker.internal)"
-    iptables -A OUTPUT -d "$HOST_GATEWAY" -j ACCEPT
+    for port in "${HOST_PORTS[@]}"; do
+        echo "Allowing host gateway $HOST_GATEWAY (host.docker.internal) on port $port"
+        iptables -A OUTPUT -d "$HOST_GATEWAY" -p tcp --dport "$port" -j ACCEPT
+    done
     iptables -A INPUT  -s "$HOST_GATEWAY" -j ACCEPT
 else
     echo "WARNING: could not determine host.docker.internal gateway."
@@ -116,6 +124,13 @@ if curl --connect-timeout 5 -sS -o /dev/null https://api.anthropic.com 2>/dev/nu
     echo "OK: allowlisted egress works (api.anthropic.com reachable)."
 else
     echo "WARNING: api.anthropic.com not reachable — allowlist may need refreshing."
+fi
+
+# Memory server (warning only: it may be started after the dev container).
+if curl --connect-timeout 5 -fsS -o /dev/null "$MEMORY_HEALTH_URL" 2>/dev/null; then
+    echo "OK: memory server reachable ($MEMORY_HEALTH_URL)."
+else
+    echo "WARNING: memory server not reachable at $MEMORY_HEALTH_URL — is it running? (see memory_server/README.md)"
 fi
 
 echo "== Egress allowlist applied =="

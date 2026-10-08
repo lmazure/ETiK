@@ -1,2 +1,3 @@
 {
+  "enabledMcpjsonServers": ["memory"]
 }

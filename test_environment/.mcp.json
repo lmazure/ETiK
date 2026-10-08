@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "memory": {
+      "type": "http",
+      "url": "${MEMORY_URL:-http://host.docker.internal:8080}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MEMORY_AGENT_TOKEN:-}",
+        "X-Memory-Store": "${MEMORY_STORE:-squashtm}",
+        "X-Memory-Session": "${MEMORY_SESSION:-}"
+      }
+    }
+  }
+}
