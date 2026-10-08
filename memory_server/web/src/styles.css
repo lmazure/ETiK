@@ -154,6 +154,8 @@ button.link:hover { text-decoration: underline; }
 .raw, .line-diff { border-collapse: collapse; width: 100%; }
 .raw td, .line-diff td { padding: 0 8px; vertical-align: top; white-space: pre-wrap; word-break: break-word; }
 .ln { width: 1%; text-align: right; color: var(--muted); user-select: none; white-space: nowrap; }
+/* Line numbers never wrap, even when a long line takes all the width (overrides the cell rule above). */
+.raw td.ln, .line-diff td.ln { white-space: nowrap; word-break: normal; }
 .raw tr.highlight { background: var(--changed-soft); }
 
 /* ---------- history */

@@ -148,3 +148,16 @@ test("a page opened while the memory is empty opens the store once the first mem
   await expect(page.locator(".tree .doc", { hasText: "first.md" }).locator(".chip-new")).toBeVisible({ timeout: 10_000 });
   await expect(page.locator(".tree .doc", { hasText: "first.md" })).toContainText("First memory");
 });
+
+test("line numbers do not wrap next to long lines", async ({ page, request }) => {
+  const lines = Array.from({ length: 12 }, (_, i) => `line ${i + 1}`);
+  lines[2] = "long ".repeat(400);
+  await create(request, "/wrap/long.md", lines.join("\n") + "\n");
+  await logIn(page);
+  await page.locator(".tree .doc", { hasText: "long.md" }).getByRole("link").click();
+  await page.getByRole("button", { name: "Raw" }).click();
+
+  const height = async (n: number) => (await page.locator(".raw td.ln").nth(n - 1).boundingBox())!.height;
+  expect(await height(10)).toBeCloseTo(await height(9), 0);
+  expect(await height(12)).toBeCloseTo(await height(9), 0);
+});
