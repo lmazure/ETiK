@@ -20,7 +20,7 @@ if [ -z "${MEMORY_AGENT_TOKEN:-}" ]; then
     echo "ERROR: MEMORY_AGENT_TOKEN is not set in memory.env." >&2
     exit 1
 fi
-export MEMORY_URL="${MEMORY_URL:-http://host.docker.internal:8080}"
+export MEMORY_URL="${MEMORY_URL:-http://host.docker.internal:9501}"
 
 if ! curl -fsS --max-time 5 -o /dev/null "$MEMORY_URL/health"; then
     echo "ERROR: the memory server does not answer at $MEMORY_URL/health: start it (see memory_server/README.md)." >&2

@@ -9,7 +9,7 @@ services:
       MEMORY_AGENT_TOKENS: ${MEMORY_AGENT_TOKENS:?set MEMORY_AGENT_TOKENS in .env}
       MEMORY_VIEWER_TOKEN: ${MEMORY_VIEWER_TOKEN:-}
     ports:
-      - "${MEMORY_PORT:-8080}:8080"
+      - "${MEMORY_PORT:-9501}:9501"
     volumes:
       - memory-data:/data
     restart: unless-stopped

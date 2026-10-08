@@ -15,8 +15,8 @@ IFS=$'\n\t'
 
 # Ports reachable on the Docker host gateway (host.docker.internal): SquashTM, memory server.
 # Keep them in sync with the SUT URL in CLAUDE.md and MEMORY_URL in memory.env.
-HOST_PORTS=(8090 8080)
-MEMORY_HEALTH_URL="http://host.docker.internal:8080/health"
+HOST_PORTS=(8090 9501)
+MEMORY_HEALTH_URL="http://host.docker.internal:9501/health"
 
 echo "== Applying egress allowlist =="
 

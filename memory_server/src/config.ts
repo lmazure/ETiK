@@ -42,7 +42,7 @@ export function parseAgentTokens(raw: string | undefined): AgentToken[] {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     host: env.HOST ?? "0.0.0.0",
-    port: integer(env, "PORT", 8080),
+    port: integer(env, "PORT", 9501),
     dbPath: env.MEMORY_DB_PATH ?? "./data/memory.db",
     adminToken: env.MEMORY_ADMIN_TOKEN || undefined,
     viewerToken: env.MEMORY_VIEWER_TOKEN || undefined,

@@ -51,27 +51,27 @@ The exact definitions (descriptions, parameters, defaults, JSON schemas) are def
 
 ```bash
 # Raw tools/list call (the server is stateless: no initialize needed)
-curl -s http://localhost:8080/mcp \
+curl -s http://localhost:9501/mcp \
   -H "Authorization: Bearer $TOKEN" -H "X-Memory-Store: squashtm" \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | jq '.result.tools'
 
 # MCP Inspector, command line (needs Node >= 22.19; @latest avoids an older cached version without --header)
-npx @modelcontextprotocol/inspector@latest --cli http://localhost:8080/mcp --transport http \
+npx @modelcontextprotocol/inspector@latest --cli http://localhost:9501/mcp --transport http \
   --header "Authorization: Bearer $TOKEN" --header "X-Memory-Store: squashtm" \
   --method tools/list
 
 # Same, with an older local Node: run the Inspector in a container
 docker run --rm --network host node:24-bookworm-slim \
-  npx -y @modelcontextprotocol/inspector@latest --cli http://localhost:8080/mcp --transport http \
+  npx -y @modelcontextprotocol/inspector@latest --cli http://localhost:9501/mcp --transport http \
   --header "Authorization: Bearer $TOKEN" --header "X-Memory-Store: squashtm" \
   --method tools/list
 
 # REST equivalent of the same schemas
-curl -s http://localhost:8080/api/openapi.json | jq
+curl -s http://localhost:9501/api/openapi.json | jq
 ```
 
-To try the tools interactively, run `npx @modelcontextprotocol/inspector@latest`, open the URL it prints, select the Streamable HTTP transport with URL `http://localhost:8080/mcp`, add the `Authorization` and `X-Memory-Store` headers, connect, then list and call the tools.
+To try the tools interactively, run `npx @modelcontextprotocol/inspector@latest`, open the URL it prints, select the Streamable HTTP transport with URL `http://localhost:9501/mcp`, add the `Authorization` and `X-Memory-Store` headers, connect, then list and call the tools.
 
 ### Results
 
@@ -110,7 +110,7 @@ The agent may run with full shell access (e.g. Claude Code in YOLO mode in a dev
 ```bash
 cp .env.example .env   # then set real tokens
 docker compose up -d --build
-curl http://localhost:8080/health
+curl http://localhost:9501/health
 ```
 
 Data is kept in the `memory-data` volume (`/data/memory.db`, SQLite).
@@ -121,7 +121,7 @@ Data is kept in the `memory-data` volume (`/data/memory.db`, SQLite).
 | `MEMORY_VIEWER_TOKEN` | — | Read-only token for every store, for the web app |
 | `MEMORY_AGENT_TOKENS` | — | `store=token,store=token`; an agent token reaches only its store(s) |
 | `MEMORY_DB_PATH` | `/data/memory.db` in the image | SQLite file |
-| `PORT` / `HOST` | `8080` / `0.0.0.0` | Listening address |
+| `PORT` / `HOST` | `9501` / `0.0.0.0` | Listening address |
 | `MEMORY_MAX_DOCUMENT_BYTES` | `1048576` | Maximum size of one document |
 | `MEMORY_MCP_MAX_OUTPUT_CHARS` | `40000` | MCP read results beyond this are truncated with a notice |
 | `MEMORY_WEB_ROOT` | `dist/web` next to the server | Built web app; not served when absent |
@@ -134,7 +134,7 @@ At least one token must be set, otherwise the server refuses to start.
 Registration in Claude Code, with store and session set by the harness:
 
 ```bash
-claude mcp add --transport http memory http://memory:8080/mcp \
+claude mcp add --transport http memory http://memory:9501/mcp \
   --header "Authorization: Bearer $MEMORY_AGENT_TOKEN" \
   --header "X-Memory-Store: squashtm" \
   --header "X-Memory-Session: session_07"
@@ -146,7 +146,7 @@ REST examples (`{store}` in the URL; document paths follow `/docs/`):
 
 ```bash
 H=(-H "Authorization: Bearer $TOKEN" -H "X-Memory-Session: session_07" -H "Content-Type: application/json")
-B=http://localhost:8080/api/stores/squashtm
+B=http://localhost:9501/api/stores/squashtm
 
 # create (If-None-Match: *), read (ETag), edit with optimistic concurrency (If-Match)
 curl "${H[@]}" -X PUT -H 'If-None-Match: *' $B/docs/entities/requirement.md \
@@ -181,7 +181,7 @@ Errors are `{"error": {"code", "message", "details"}}`: 400 invalid arguments or
 
 ## Web app
 
-Open `http://localhost:8080/` and paste the viewer token (it stays in the tab, or in the browser if you tick "Remember").
+Open `http://localhost:9501/` and paste the viewer token (it stays in the tab, or in the browser if you tick "Remember").
 
 - **Documents** (left): the folder tree with each document's description; filter by path, description or tag. Deleted documents are listed apart, their history stays readable.
 - **Document** (center): one version, rendered Markdown or raw numbered lines, with its metadata and who changed it (actor, session, change note).
@@ -202,7 +202,7 @@ Reload the page to start from the current state again. Links are shareable (`#/s
 
 The test dev container (`../test_environment/`) uses the store `squashtm`:
 
-- `.mcp.json` registers `/mcp` for Claude Code, with the agent token, the store and the session taken from the environment (`MEMORY_AGENT_TOKEN`, `MEMORY_STORE`, `MEMORY_SESSION`; `MEMORY_URL` defaults to `http://host.docker.internal:8080`).
+- `.mcp.json` registers `/mcp` for Claude Code, with the agent token, the store and the session taken from the environment (`MEMORY_AGENT_TOKEN`, `MEMORY_STORE`, `MEMORY_SESSION`; `MEMORY_URL` defaults to `http://host.docker.internal:9501`).
 - `start-session.sh` reads the token from `memory.env`, checks that the server answers and accepts it, creates the next `session_##` directory and starts Claude Code with `MEMORY_SESSION` set to its name, so every change is recorded with its Exploratory Test Session.
 - `.devcontainer/init-firewall.sh` allows the memory server's host port.
 - `knowledge/INSTRUCTIONS.md` is the policy (documents, entity schema, source tags, capture and consolidation) expressed with the tools. There is no index document: `memory_list` returns each document's description.

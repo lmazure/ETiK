@@ -10,7 +10,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    // `npm run dev:web` with the server running on 8080 (`npm run dev`)
-    proxy: { "/api": "http://localhost:8080" },
+    // `npm run dev:web` with the server running on 9501 (`npm run dev`)
+    proxy: { "/api": "http://localhost:9501" },
   },
 });
