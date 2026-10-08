@@ -1,9 +1,9 @@
 # Memory service: `docker compose up -d --build` (tokens are read from .env, see .env.example).
 services:
   memory:
-    container_name: etik-memory
+    container_name: memory-server
     build: .
-    image: etik-memory:latest
+    image: memory-server:latest
     environment:
       MEMORY_ADMIN_TOKEN: ${MEMORY_ADMIN_TOKEN:?set MEMORY_ADMIN_TOKEN in .env}
       MEMORY_AGENT_TOKENS: ${MEMORY_AGENT_TOKENS:?set MEMORY_AGENT_TOKENS in .env}

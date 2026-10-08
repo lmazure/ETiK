@@ -1,5 +1,5 @@
 {
-  "name": "etik-memory-server",
+  "name": "memory-server",
   "version": "0.1.0",
   "description": "Versioned document memory for LLM agents, exposed over REST and MCP",
   "private": true,

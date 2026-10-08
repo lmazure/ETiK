@@ -14,7 +14,7 @@ export function Header() {
 
   return (
     <header class="topbar">
-      <span class="brand">ETiK memory</span>
+      <span class="brand">Memory</span>
       {stores.value.length > 1 ? (
         <select aria-label="Store" value={store} onChange={(e) => navigate({ name: "store", store: (e.target as HTMLSelectElement).value })}>
           {stores.value.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}

@@ -9,7 +9,7 @@ import {
   formatBatch, formatDelete, formatError, formatHistory, formatList, formatMove, formatRead, formatSearch, formatWrite,
 } from "./format.js";
 
-export const SERVER_NAME = "etik-memory";
+export const SERVER_NAME = "memory-server";
 export const SERVER_VERSION = "0.1.0";
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };

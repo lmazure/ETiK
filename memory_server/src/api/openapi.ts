@@ -32,7 +32,7 @@ export function openApiDocument(): Record<string, unknown> {
   return {
     openapi: "3.1.0",
     info: {
-      title: "ETiK memory API",
+      title: "Memory API",
       version: "0.1.0",
       description: "Versioned document memory. Each operation mirrors one MCP tool; the rules are the same.",
     },

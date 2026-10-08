@@ -30,7 +30,7 @@ export function Login() {
   return (
     <div class="login">
       <form onSubmit={submit}>
-        <h1>ETiK memory</h1>
+        <h1>Memory</h1>
         <p class="muted">Paste a token: the viewer token (read-only) is meant for this page.</p>
         <label>
           Token
