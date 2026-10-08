@@ -22,19 +22,19 @@ export function Header() {
       ) : (
         <span class="store-name">{store}</span>
       )}
-      <form class="search" role="search" onSubmit={(e) => {
+      {store && <form class="search" role="search" onSubmit={(e) => {
         e.preventDefault();
         if (store && query.trim()) navigate({ name: "search", store, query: query.trim() });
       }}>
         <input type="search" placeholder="Search the memory…" aria-label="Search" value={query}
           onInput={(e) => setQuery((e.target as HTMLInputElement).value)} />
-      </form>
-      <button type="button" class={`live live-${status}`} onClick={() => (sidebarTab.value = "activity")}
+      </form>}
+      {store && <button type="button" class={`live live-${status}`} onClick={() => (sidebarTab.value = "activity")}
         title="Changes are checked every few seconds; the open document is never replaced">
         <span class="dot" aria-hidden="true" />
         {status === "live" ? "live" : status === "error" ? "connection lost, retrying" : "connecting"}
         {" · "}{count === 0 ? "no change since load" : `${count} change${count === 1 ? "" : "s"} since load`}
-      </button>
+      </button>}
       <button type="button" class="link" onClick={logOut}>Log out</button>
     </header>
   );

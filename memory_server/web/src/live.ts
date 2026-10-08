@@ -6,6 +6,11 @@ const VISIBLE_INTERVAL = 3_000;
 const HIDDEN_INTERVAL = 30_000;
 const BATCH = 200;
 
+/** Delay before the next check: short while the tab is visible, long when it is hidden. */
+export function pollDelay(): number {
+  return document.hidden ? HIDDEN_INTERVAL : VISIBLE_INTERVAL;
+}
+
 /**
  * Polls the change feed of a store from `cursor`: every 3 s while the tab is visible, every 30 s when hidden,
  * immediately when it becomes visible again. Returns a function that stops polling.
@@ -28,7 +33,7 @@ export function startPolling(
   const tick = async () => {
     if (stopped || running) return;
     running = true;
-    let delay = document.hidden ? HIDDEN_INTERVAL : VISIBLE_INTERVAL;
+    let delay = pollDelay();
     try {
       const result = await api.changes(store, { since: cursor, limit: BATCH });
       if (stopped) return;

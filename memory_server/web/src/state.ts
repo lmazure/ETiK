@@ -1,6 +1,6 @@
 import { signal } from "@preact/signals";
 import { api, clearToken, loadToken, setToken, setUnauthorizedHandler, type Change, type DeletedDoc, type StoreInfo } from "./api.js";
-import { startPolling, type LiveStatus } from "./live.js";
+import { pollDelay, startPolling, type LiveStatus } from "./live.js";
 import { formatRoute, parseRoute, type Route } from "./routes.js";
 import { applyChange, fromList, type TreeDoc } from "./tree.js";
 
@@ -12,6 +12,8 @@ export interface ActivityEntry {
 
 export const token = signal<string | undefined>(loadToken());
 export const stores = signal<StoreInfo[]>([]);
+/** The list of stores has been received at least once. */
+export const storesLoaded = signal(false);
 export const route = signal<Route>(parseRoute(location.hash));
 export const sidebarTab = signal<"documents" | "activity">("documents");
 
@@ -59,19 +61,57 @@ export function logOut(): void {
   token.value = undefined;
   currentStore.value = undefined;
   stores.value = [];
+  storesLoaded.value = false;
 }
 
 setUnauthorizedHandler(logOut);
 
 let stopPolling: (() => void) | undefined;
 
+/**
+ * Loads the list of stores and opens the first one when no store is selected. A store only exists once
+ * something has been written to it: while there is none, the list is checked again at the polling rhythm,
+ * and a store that appears is opened from its very first change, since all of them happened after page load.
+ * Returns a function that stops checking.
+ */
+export function watchStores(): () => void {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let waited = false;
+  const load = async () => {
+    try {
+      const list = await api.stores();
+      if (stopped) return;
+      stores.value = list;
+      storesLoaded.value = true;
+      const first = list[0];
+      if (!first) {
+        waited = true;
+        timer = setTimeout(() => void load(), pollDelay());
+        return;
+      }
+      if (route.value.name !== "none") return;
+      if (waited) await openStore(first.name, { fromStart: true });
+      navigate({ name: "store", store: first.name });
+    } catch (error) {
+      if (!stopped) loadError.value = (error as Error).message;
+    }
+  };
+  void load();
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
+}
+
 const RECENT_ACTIVITY = 50;
 
 /**
  * Loads a store and starts following its changes. The cursor is read first, so every change after it is
  * "since page load" and shows a marker, even one that the listing already includes.
+ * With `fromStart`, the whole store is new since page load: it is rebuilt from its first change, every change live.
  */
-export async function openStore(store: string): Promise<void> {
+export async function openStore(store: string, { fromStart = false }: { fromStart?: boolean } = {}): Promise<void> {
   if (currentStore.value === store) return;
   stopPolling?.();
   currentStore.value = store;
@@ -82,6 +122,11 @@ export async function openStore(store: string): Promise<void> {
   liveCount.value = 0;
   loadError.value = undefined;
   liveStatus.value = "connecting";
+  if (fromStart) {
+    activityComplete.value = true;
+    stopPolling = startPolling(store, 0, receive, (status) => (liveStatus.value = status));
+    return;
+  }
   try {
     const recent = await api.changes(store, { limit: RECENT_ACTIVITY });
     const [documents, deleted] = await Promise.all([api.listAll(store), api.deleted(store)]);

@@ -129,3 +129,22 @@ test("a link to another memory document opens it in the app", async ({ page, req
   await expect(page.locator(".doc-header h2")).toContainText("/links/requirement.md");
   expect(page.context().pages()).toHaveLength(pages);
 });
+
+test("a page opened while the memory is empty opens the store once the first memory is written", async ({ page, request }) => {
+  // The e2e server is shared by the tests and already has a store: make the page see none at first.
+  await page.route("**/api/stores", (route) => route.fulfill({ json: { stores: [] } }));
+  await page.goto("/");
+  await page.getByLabel("Token").fill(E2E.viewerToken);
+  await page.getByRole("button", { name: "Open" }).click();
+  await expect(page.getByRole("heading", { name: "The memory is empty" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^connecting/ })).toHaveCount(0);
+  await page.screenshot({ path: "test-results/empty.png" });
+
+  await create(request, "/empty/first.md", "# First\n", "First memory");
+  await page.unroute("**/api/stores");
+
+  await expect(page.getByRole("button", { name: /^live/ })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("heading", { name: "The memory is empty" })).toHaveCount(0);
+  await expect(page.locator(".tree .doc", { hasText: "first.md" }).locator(".chip-new")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".tree .doc", { hasText: "first.md" })).toContainText("First memory");
+});

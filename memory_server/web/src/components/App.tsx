@@ -1,6 +1,5 @@
 import { useEffect } from "preact/hooks";
-import { api } from "../api.js";
-import { currentStore, liveCount, loadError, navigate, openStore, route, stores, token, treeDocs, deletedDocs } from "../state.js";
+import { currentStore, deletedDocs, liveCount, loadError, openStore, route, stores, storesLoaded, token, treeDocs, watchStores } from "../state.js";
 import { ErrorMessage, Loading } from "./common.js";
 import { DiffView } from "./DiffView.js";
 import { DocumentView } from "./DocumentView.js";
@@ -18,12 +17,7 @@ export function App() {
 function Main() {
   const current = route.value;
 
-  useEffect(() => {
-    api.stores().then((list) => {
-      stores.value = list;
-      if (current.name === "none" && list[0]) navigate({ name: "store", store: list[0].name });
-    }, (error: Error) => (loadError.value = error.message));
-  }, []);
+  useEffect(() => watchStores(), []);
 
   useEffect(() => {
     if (current.name !== "none") void openStore(current.store);
@@ -37,7 +31,7 @@ function Main() {
         <Sidebar />
         <main class="content">
           {loadError.value && <ErrorMessage message={loadError.value} />}
-          {!store ? <Loading /> : <Content />}
+          {store ? <Content /> : storesLoaded.value && stores.value.length === 0 ? <EmptyMemory /> : <Loading />}
         </main>
         {(current.name === "doc" || current.name === "diff") && (
           <HistoryPanel key={`${current.store}/${current.id}`} store={current.store} id={current.id}
@@ -61,6 +55,18 @@ function Content() {
     default:
       return <StoreHome />;
   }
+}
+
+function EmptyMemory() {
+  return (
+    <article class="home">
+      <h2>The memory is empty</h2>
+      <p class="muted">
+        No agent has written anything yet. This page checks every few seconds and opens the store
+        as soon as the first memory is recorded.
+      </p>
+    </article>
+  );
 }
 
 function StoreHome() {
