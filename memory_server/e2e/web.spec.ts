@@ -112,3 +112,20 @@ test("search leads to the matching line", async ({ page, request }) => {
   await page.getByRole("link", { name: /needle here/ }).click();
   await expect(page.locator(".raw tr.highlight")).toContainText("needle here");
 });
+
+test("a link to another memory document opens it in the app", async ({ page, request }) => {
+  await create(request, "/links/requirement.md", "# Requirement\n\nThe target.\n");
+  await create(request, "/links/high-level.md",
+    "Special nature of [requirement](/links/requirement.md); see also [campaign](campaign.md).\n");
+  await logIn(page);
+  const pages = page.context().pages().length;
+
+  await page.locator(".tree .doc", { hasText: "high-level.md" }).getByRole("link").click();
+  const content = page.locator(".markdown");
+  await expect(content.locator(".memory-link.missing")).toHaveAttribute("title", "No document at /links/campaign.md");
+  await content.getByRole("link", { name: "requirement" }).click();
+
+  await expect(content).toContainText("The target.");
+  await expect(page.locator(".doc-header h2")).toContainText("/links/requirement.md");
+  expect(page.context().pages()).toHaveLength(pages);
+});

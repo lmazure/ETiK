@@ -185,6 +185,7 @@ Open `http://localhost:9501/` and paste the viewer token (it stays in the tab, o
 
 - **Documents** (left): the folder tree with each document's description; filter by path, description or tag. Deleted documents are listed apart, their history stays readable.
 - **Document** (center): one version, rendered Markdown or raw numbered lines, with its metadata and who changed it (actor, session, change note).
+  A link to another memory document, absolute (`/entities/requirement.md`) or relative to the document (`requirement.md`, `../business-rules.md`), opens it in the app; a link to a document that does not exist is greyed out; any other link opens in a new tab.
 - **History** (right): every version of the open document; open any version, diff it with the previous one, or tick two versions and compare them.
 - **Diff**: path, description, tags and metadata changes, then a line diff with folded unchanged parts.
 - **Activity** (left tab): the store's changes, newest first, one entry per write call or batch; a click opens the diff introduced.

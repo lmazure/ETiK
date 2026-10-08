@@ -2,8 +2,9 @@ import { signal } from "@preact/signals";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { api, type ChangeItem, type DocInfo, type VersionResult } from "../api.js";
 import { formatSize, formatTime, OP_LABEL } from "../format.js";
-import { renderMarkdown } from "../markdown.js";
-import { onLiveChange, shownVersion } from "../state.js";
+import { memoryLinkPath, renderMarkdown, type LinkResolver } from "../markdown.js";
+import { formatRoute } from "../routes.js";
+import { onLiveChange, shownVersion, treeDocs } from "../state.js";
 import { ErrorMessage, Link, Loading, Tags, useAsync } from "./common.js";
 
 /** Rendered Markdown or raw numbered lines; kept when moving between documents. */
@@ -91,14 +92,24 @@ export function DocumentView({ store, id, version, line }: { store: string; id: 
         </div>
       </header>
       {mode.value === "rendered" && line === undefined
-        ? <Rendered content={shown.content} />
+        ? <Rendered store={store} path={shown.path} content={shown.content} />
         : <Raw content={shown.content} line={line} />}
     </article>
   );
 }
 
-function Rendered({ content }: { content: string }) {
-  const html = useMemo(() => renderMarkdown(content), [content]);
+function Rendered({ store, path, content }: { store: string; path: string; content: string }) {
+  const docs = treeDocs.value;
+  const html = useMemo(() => {
+    // Links to other memory documents open them here, when they exist in the store as loaded.
+    const links: LinkResolver = (href) => {
+      const target = memoryLinkPath(href, path);
+      if (target === undefined) return undefined;
+      const doc = docs.get(target);
+      return { path: target, href: doc && !doc.gone ? formatRoute({ name: "doc", store, id: doc.id }) : undefined };
+    };
+    return renderMarkdown(content, links);
+  }, [store, path, content, docs]);
   if (content.trim() === "") return <p class="muted">(empty document)</p>;
   return <div class="markdown" dangerouslySetInnerHTML={{ __html: html }} />;
 }

@@ -149,6 +149,7 @@ button.link:hover { text-decoration: underline; }
 .markdown table { border-collapse: collapse; }
 .markdown th, .markdown td { border: 1px solid var(--border); padding: 3px 8px; }
 .markdown pre.raw-html, .markdown code.raw-html { border: 1px dashed var(--border); }
+.markdown .memory-link.missing { color: var(--muted); text-decoration: underline dotted; cursor: help; }
 
 .raw, .line-diff { border-collapse: collapse; width: 100%; }
 .raw td, .line-diff td { padding: 0 8px; vertical-align: top; white-space: pre-wrap; word-break: break-word; }
