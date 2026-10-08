@@ -3,7 +3,7 @@
 ## Prerequisites
 
 On the host:
-- SquashTM listening on port 8090 (see the Docker Compose file in `../notes.md`).
+- SquashTM listening on port 8090, e.g. started with Docker Compose as described in the [SquashTM Docker quick start](https://tm-en.doc.squashtest.com/latest/install-guide/installation/install-squash/docker-install.html#quick-start), with its port published on 8090.
 - The memory server listening on port 9501 (see `../memory_server/README.md`), with an agent token for the store `squashtm`.
 
 Copy `memory.env.example` to `memory.env` and set `MEMORY_AGENT_TOKEN` to that agent token (the value after `squashtm=` in `MEMORY_AGENT_TOKENS` of `../memory_server/.env`). `memory.env` is gitignored. The agent can read it, but it only holds the agent's own token; the admin token stays outside the dev container.
