@@ -5,12 +5,8 @@ You are in charge to perform some Exploratory Testing on SquashTM, a test manage
 This project is organized as follows:
 
 - `CLAUDE.md` — read only — this file: the instructions governing how Exploratory Test Sessions are run.
-- `knowledge/` — durable, cross-Session memory about the SUT (see `knowledge/INSTRUCTIONS.md`). It survives across Sessions.
-  - `knowledge/INSTRUCTIONS.md` — read only — the format and update rules for the knowledge base.
-  - `knowledge/index.md` — the only knowledge file loaded every Session: a compact table of pointers (one row per knowledge file).
-  - `knowledge/business-rules.md` — cross-cutting business rules that span more than one entity.
-  - `knowledge/entities/` — contains one file per business entity (its docs, UI pages…).
-- `session_##/` — one directory per Exploratory Test Session (`##` is a two-digit counter). Created and filled while a Session runs:
+- `knowledge/INSTRUCTIONS.md` — read only — the format and update rules for the knowledge base, the durable cross-Session memory about the SUT. The knowledge base itself is not on disk: it lives in the memory server (see "Cross-Session Memory").
+- `session_##/` — one directory per Exploratory Test Session (`##` is a two-digit counter). The directory of the current Session is created by the launcher (`start-session.sh`) and its name is in the environment variable `MEMORY_SESSION`. It is filled while the Session runs:
   - `session_##/charter.md` — the approved Exploratory Test Charter of the Session .
   - `session_##/checklist.md` — the hierarchical test checklist with checkboxes (updated as tests are performed).
   - `session_##/log.md` — the replay trace: every action and check performed, plus test-strategy rationale and analysis conclusions.
@@ -21,26 +17,30 @@ IMPORTANT: **Write each file update immediately when content is ready.** Never b
 
 ## Cross-Session Memory
 
-Across Exploratory Test Sessions, you accumulate durable knowledge about the SUT in the `knowledge/` directory.  
+Across Exploratory Test Sessions, you accumulate durable knowledge about the SUT in the knowledge base held by the memory server, which you access with the `memory_*` tools.  
 The purpose of this knowledge collection is to help you navigate and understand faster the SUT during future Sessions.  
-The format and update rules live in `knowledge/INSTRUCTIONS.md`. You must read that file.
+The memory server records every change with the current Session and keeps every version, so nothing written there is ever lost.  
+The format and update rules live in `knowledge/INSTRUCTIONS.md`. You must read that file.  
+Do not use any other memory (local files, other memory tools) for SUT knowledge. If the `memory_*` tools are not available or fail because the memory server is unreachable, tell the user and stop.
 
 ## Organization of the Exploratory Test Session
 
 ### Stage 1 - Define the Exploratory Test Charter
 
+First, run `echo "$MEMORY_SESSION"` to get the name of the current Session (e.g. `session_03`): `session_##` in these instructions stands for it, and its directory already exists. If it is empty, you were not started by `start-session.sh`: ask the user to restart you with `./start-session.sh` and stop.
+
 If the user has not provided an ET Charter, ask them.  
 
-Then, read `knowledge/index.md`. From its entries, open only the knowledge files relevant to the Charter at hand. Treat their content as prior knowledge of the SUT; re-check any `assumed` fact your test will depend on. Do not bulk-read the folder.
+Then, list the knowledge base with `memory_list` (see `knowledge/INSTRUCTIONS.md`). From the descriptions, read only the documents relevant to the Charter at hand. Treat their content as prior knowledge of the SUT; re-check any `assumed` fact your test will depend on. Do not bulk-read the knowledge base.
 
-If any information sources (User Documentation, User Stories, Bug Reports…) have been provided by the user, read them. If some of this provided information is unclear, contradictory (possibly with your knowledge files), incomplete… ask for clarification.
+If any information sources (User Documentation, User Stories, Bug Reports…) have been provided by the user, read them. If some of this provided information is unclear, contradictory (possibly with the knowledge base), incomplete… ask for clarification.
 
-Then, extract the durable facts about the SUT from these information sources into the relevant `knowledge/` files, tagged `documented` with the Session, date, and source name. Append new entries (a doc, a UI page…) rather than overwriting existing ones. Create new files and update `knowledge/index.md` as needed. Capture only stable knowledge about the SUT, not the Session-specific Charter or checklist content.
+Then, extract the durable facts about the SUT from these information sources into the relevant knowledge documents, tagged `documented` with the Session, date, and source name. Append new entries (a doc, a UI page…) rather than overwriting existing ones. Create new documents as needed. Capture only stable knowledge about the SUT, not the Session-specific Charter or checklist content.
 
 You must have the necessary information to be able to perform the test. Ask for information completion if this is not the case. Since this is about Exploratory Testing, it is acceptable that the test perimeter is more or less fuzzy. Everything else should be clearly stated.
 
 Once you have the necessary data, propose a rewritten Charter to the user. If they have feedback, adapt the Charter.  
-When the user has approved the Charter, write it in `session_##/charter.md` (`##` is a two-digit increment, 1-based counter, e.g. `session_01/charter.md` for the first Exploratory Test Session).
+When the user has approved the Charter, write it in `session_##/charter.md`.
 
 ### Stage 2 - Define an initial test checklist
 
@@ -55,7 +55,7 @@ Pick one of the tests to be performed in `session_##/checklist.md`.
 Perform the test.  
 Document each action and each check you perform at the end of `session_##/log.md`. The aim is that someone reading that file should be able to replay the test. Add screenshots where applicable, these screenshots should be recorded in the `session_##` directory, use semantic filenames. If you install and/or use any tool (e.g., a PDF parser), indicate them in the log file.
 
-While testing, the moment you confirm a durable fact about the SUT (a UI page where the entity is managed and how to reach it, a stable business rule, or a private backend API call the UI emitted) append it as a new entry to the relevant `knowledge/` file, tagged `observed` with the session and date. The same entity may gain several UI pages, endpoint entries… across sessions; append, don't overwrite. Create new files and update `knowledge/index.md` as needed. This is distinct from `log.md`: put distilled, reusable facts in `knowledge/`, never session state or bugs.
+While testing, the moment you confirm a durable fact about the SUT (a UI page where the entity is managed and how to reach it, a stable business rule, or a private backend API call the UI emitted) append it as a new entry to the relevant knowledge document, tagged `observed` with the session and date. The same entity may gain several UI pages, endpoint entries… across sessions; append, don't overwrite. Create new documents as needed. This is distinct from `log.md`: put distilled, reusable facts in the knowledge base, never session state or bugs.
 
 If you find something incorrect (not respecting what information sources or the user indicated) or dubious (not respecting what you would expect), apply the instructions of Stage 4.  
 
@@ -117,7 +117,7 @@ Provide the date and time of the test.
 Indicate the name of the model (LLM), the thinking level, and the name of the tool piloting the LLM.
 ```
 
-When an analysis clears a dubious behavior as actually expected, record the underlying rule in `knowledge/business-rules.md` (or the relevant entity file), tagged `observed` with the Session and date, and update `knowledge/index.md` if you created a file. When you confirm a bug, it goes only to the bug report, never to `knowledge/`, since bugs are transient and may be fixed.
+When an analysis clears a dubious behavior as actually expected, record the underlying rule in the knowledge document `/business-rules.md` (or the relevant entity document), tagged `observed` with the Session and date. When you confirm a bug, it goes only to the bug report, never to the knowledge base, since bugs are transient and may be fixed.
 
 Whatever the outcome, once the analysis of a behavior is complete, remove the ` <- CURRENTLY TESTING THIS` marker from that test (the most deeply nested one you opened) and check the boxes of the analysis tests you performed for it. Any ancestor tests keep their marker, since their own analysis is still ongoing; you finish unwinding them the same way as you climb back up.
 
@@ -130,13 +130,13 @@ When you have written 16 `bug_###.md` files, stop the Exploratory Testing Sessio
 
 ### Stage 5 - Consolidate Memory
 
-After the Session summary, do a cleanup pass over `knowledge/` (log each cleanup in `session_##/log.md`):
+After the Session summary, do a cleanup pass over the knowledge base (log each cleanup in `session_##/log.md`):
 - Merge only true duplicates: the same doc page, UI page, or endpoint recorded twice. Keep genuinely distinct entries (different pages, different endpoints) separate, each with its own Session/date.
 - Resolve contradictions (keep the newest, note the Session and date).
 - Promote `assumed` facts that got confirmed during the Session to `observed`.
 - Prune dead ends and anything that turned out wrong.
-- Keep each entity file in the standard schema defined in `knowledge/INSTRUCTIONS.md`.
-- Verify `knowledge/index.md` matches the folder: every file has exactly one row, no row points to a missing file, and every scope line is still accurate.
+- Keep each entity document in the standard schema defined in `knowledge/INSTRUCTIONS.md`.
+- Verify with `memory_list` that every document's description still matches its content and that each document has the right tags.
 
 ## System Under Test
 
