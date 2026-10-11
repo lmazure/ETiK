@@ -58,7 +58,7 @@ curl http://localhost:9501/health
 `.env` holds three tokens: admin (everything), viewer (the web app, read-only) and the agent token of the store `squashtm` (`MEMORY_AGENT_TOKENS=squashtm=…`).
 The memories are kept in the `memory-data` Docker volume.
 Open `http://localhost:9501/` and log in with the viewer token to watch the memory.
-See `memory_server/README.md` for the tools, the REST API and the web app.
+See `memory_server/README.md` for the server and the web app, and `memory_server/API.md` for the tools and the REST API.
 
 ### 3) Run Exploratory Tests in the dev container
 

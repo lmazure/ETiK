@@ -47,7 +47,7 @@ One container exposes the same core through:
 | `memory_batch` | Apply up to 50 write / edit / move / delete calls atomically, in one change. |
 | `memory_history` | List the versions of a document, newest first, with date, operation, session, author and change note. |
 
-The exact definitions (descriptions, parameters, defaults, JSON schemas) are defined once in [`src/schemas.ts`](src/schemas.ts) and published by the running server, so they are never copied here. To get them:
+[`API.md`](API.md) details every tool (parameters, defaults, behaviour, errors, output) and every REST endpoint. The definitions themselves live in [`src/schemas.ts`](src/schemas.ts) and are published by the running server; to get them:
 
 ```bash
 # Raw tools/list call (the server is stateless: no initialize needed)
@@ -160,24 +160,7 @@ curl "${H[@]}" -X POST $B/search -d '{"query":"assumed"}'
 curl "${H[@]}" $B/history/entities/requirement.md
 ```
 
-| Tool | REST |
-| --- | --- |
-| `memory_list` | `GET /api/stores/{store}/list?path=&depth=&tags=a,b&limit=&offset=` |
-| `memory_read` | `GET /api/stores/{store}/docs/{path}?section=&from=&to=&version=` |
-| `memory_search` | `POST /api/stores/{store}/search` |
-| `memory_write` | `PUT /api/stores/{store}/docs/{path}` (`If-None-Match: *` to create, otherwise overwrite; `If-Match` for the version) |
-| `memory_edit` | `PATCH /api/stores/{store}/docs/{path}` |
-| `memory_move` | `POST /api/stores/{store}/move` |
-| `memory_delete` | `DELETE /api/stores/{store}/docs/{path}?recursive=` |
-| `memory_batch` | `POST /api/stores/{store}/batch` |
-| `memory_history` | `GET /api/stores/{store}/history/{path}` |
-| (any token) | `GET /api/stores`: the stores the token reaches |
-| (any token) | `GET /api/stores/{store}/changes?since=\|before=&limit=`: change feed, `{latest, changes}`; each change is one write call or batch with the versions it created |
-| (any token) | `GET /api/stores/{store}/documents/{id}`, `…/documents/{id}/history`, `…/documents/{id}/versions/{version}`: reads by document id, which stays valid across moves and deletion |
-| (any token) | `GET /api/stores/{store}/deleted`: deleted documents |
-| (admin) | `POST /api/stores/{store}/restore` |
-
-Errors are `{"error": {"code", "message", "details"}}`: 400 invalid arguments or path, 401 missing or unknown token, 403 forbidden store, admin route, or write with the viewer token, 404 not found, 409 already exists or is a folder, 412 version conflict, 413 too large, 422 edit failure (`old_str` absent or not unique, section missing or duplicated), 501 unsupported search mode.
+Each tool has a REST equivalent, and REST adds the store list, the change feed, reads by document id, the deleted documents and the admin restore. See [`API.md`](API.md#rest-api) for every endpoint, the headers and the error codes. Errors are `{"error": {"code", "message", "details"}}`.
 
 ## Web app
 
