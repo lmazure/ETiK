@@ -20,14 +20,16 @@ export function nextSessionName(workspaceDir: string): string {
 
 /**
  * Prepares the workspace for a session of `configuration`:
- * creates the session directory, replaces `.claude/skills/` with exactly the selected skills,
- * and copies the configuration's `files/` over the workspace.
+ * - creates the session directory;
+ * - replaces `.claude/skills/` with exactly the selected skills;
+ *   a built-in skill also brings the other files its installer produced (e.g. `.playwright/cli.config.json`);
+ * - copies the configuration's `files/` over the workspace, last, so that they can override built-in files.
  * Everything written is given to `owner` (the agent user) when set.
  */
 export function prepareWorkspace(
   workspaceDir: string,
   configuration: Configuration,
-  builtinSkillsDir: string,
+  builtinDir: string,
   sessionName: string,
   owner: Owner | undefined,
 ): void {
@@ -40,25 +42,36 @@ export function prepareWorkspace(
   mkdirSync(skillsDir, { recursive: true });
   for (const skill of configuration.config.skills) {
     const uploaded = join(configuration.dir, SKILLS_DIR, skill);
-    cpSync(existsSync(uploaded) ? uploaded : join(builtinSkillsDir, skill), join(skillsDir, skill), { recursive: true });
+    if (existsSync(uploaded)) {
+      cpSync(uploaded, join(skillsDir, skill), { recursive: true });
+      continue;
+    }
+    const installed = join(builtinDir, skill);
+    cpSync(join(installed, ".claude", "skills", skill), join(skillsDir, skill), { recursive: true });
+    for (const entry of readdirSync(installed)) {
+      if (entry !== ".claude") copyInto(workspaceDir, installed, entry, owner);
+    }
   }
   chown(claudeDir, owner);
 
   const files = join(configuration.dir, FILES_DIR);
   if (existsSync(files)) {
-    for (const entry of readdirSync(files)) {
-      const target = join(workspaceDir, entry);
-      cpSync(join(files, entry), target, { recursive: true, force: true });
-      chown(target, owner);
-    }
+    for (const entry of readdirSync(files)) copyInto(workspaceDir, files, entry, owner);
   }
 }
 
-/** The installed built-in skills: the directories of `builtinSkillsDir` holding a SKILL.md. */
-export function builtinSkills(builtinSkillsDir: string): string[] {
-  if (!existsSync(builtinSkillsDir)) return [];
-  return readdirSync(builtinSkillsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && existsSync(join(builtinSkillsDir, entry.name, "SKILL.md")))
+/** Copies `<from>/<entry>` into the workspace, over what is there. */
+function copyInto(workspaceDir: string, from: string, entry: string, owner: Owner | undefined): void {
+  const target = join(workspaceDir, entry);
+  cpSync(join(from, entry), target, { recursive: true, force: true });
+  chown(target, owner);
+}
+
+/** The installed built-in skills: the directories `<builtinDir>/<name>/` holding `.claude/skills/<name>/SKILL.md`. */
+export function builtinSkills(builtinDir: string): string[] {
+  if (!existsSync(builtinDir)) return [];
+  return readdirSync(builtinDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(builtinDir, entry.name, ".claude", "skills", entry.name, "SKILL.md")))
     .map((entry) => entry.name)
     .sort();
 }

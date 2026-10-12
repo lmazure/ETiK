@@ -20,7 +20,7 @@ if (isRoot) {
   owner = { uid: id("-u"), gid: id("-g") };
 }
 
-const skills = () => builtinSkills(settings.builtinSkillsDir);
+const skills = () => builtinSkills(settings.builtinDir);
 const store = new ConfigurationStore(settings.stateDir, skills);
 const sessions = new SessionManager(settings, store, {
   spawnClaude: (args, options) => {

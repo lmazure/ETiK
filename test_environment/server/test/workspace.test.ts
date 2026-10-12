@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ConfigurationStore } from "../src/store.js";
-import { claudeArguments, expandVariables, nextSessionName, prepareWorkspace } from "../src/workspace.js";
+import { builtinSkills, claudeArguments, expandVariables, nextSessionName, prepareWorkspace } from "../src/workspace.js";
 import { minimalFiles, squashtmFiles, testSettings } from "./helpers.js";
 
 let settings: ReturnType<typeof testSettings>;
@@ -34,24 +34,41 @@ describe("prepareWorkspace", () => {
     mkdirSync(join(settings.workspaceDir, ".playwright"), { recursive: true });
     writeFileSync(join(settings.workspaceDir, ".playwright", "cli.config.json"), "{\"edited\": true}");
 
-    prepareWorkspace(settings.workspaceDir, configuration, settings.builtinSkillsDir, "session_01", undefined);
+    prepareWorkspace(settings.workspaceDir, configuration, settings.builtinDir, "session_01", undefined);
 
     expect(existsSync(join(settings.workspaceDir, "session_01"))).toBe(true);
     expect(existsSync(join(skills, "stale"))).toBe(false);
     expect(existsSync(join(skills, "playwright-cli", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(skills, "playwright-cli", ".claude"))).toBe(false);
     expect(existsSync(join(skills, "browser-language", "SKILL.md"))).toBe(true);
     expect(existsSync(join(skills, "get-logs", "scripts", "get-logs.mjs"))).toBe(true);
     expect(existsSync(join(settings.workspaceDir, "knowledge", "INSTRUCTIONS.md"))).toBe(true);
+    // From the built-in skill playwright-cli, over the file left by a previous session.
     expect(JSON.parse(readFileSync(join(settings.workspaceDir, ".playwright", "cli.config.json"), "utf8")).browser.browserName).toBe("chromium");
     // The system prompt and config.json are not copied into the workspace.
     expect(existsSync(join(settings.workspaceDir, "system-prompt.md"))).toBe(false);
     expect(existsSync(join(settings.workspaceDir, "config.json"))).toBe(false);
   });
 
-  it("prefers an uploaded skill to a built-in one of the same name", () => {
+  it("lets files/ override the files of a built-in skill", () => {
+    const configuration = store.save("c", minimalFiles({ skills: ["playwright-cli"] }, { "files/.playwright/cli.config.json": "{\"mine\": true}" }));
+    prepareWorkspace(settings.workspaceDir, configuration, settings.builtinDir, "session_01", undefined);
+    expect(readFileSync(join(settings.workspaceDir, ".playwright", "cli.config.json"), "utf8")).toBe("{\"mine\": true}");
+  });
+
+  it("prefers an uploaded skill to a built-in one of the same name, without the built-in files", () => {
     const configuration = store.save("c", minimalFiles({ skills: ["playwright-cli"] }, { "skills/playwright-cli/SKILL.md": "uploaded" }));
-    prepareWorkspace(settings.workspaceDir, configuration, settings.builtinSkillsDir, "session_01", undefined);
+    prepareWorkspace(settings.workspaceDir, configuration, settings.builtinDir, "session_01", undefined);
     expect(readFileSync(join(settings.workspaceDir, ".claude", "skills", "playwright-cli", "SKILL.md"), "utf8")).toBe("uploaded");
+    expect(existsSync(join(settings.workspaceDir, ".playwright"))).toBe(false);
+  });
+});
+
+describe("builtinSkills", () => {
+  it("lists the installed skills", () => {
+    mkdirSync(join(settings.builtinDir, "not-a-skill"));
+    expect(builtinSkills(settings.builtinDir)).toEqual(["playwright-cli"]);
+    expect(builtinSkills(join(settings.builtinDir, "missing"))).toEqual([]);
   });
 });
 

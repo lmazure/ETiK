@@ -49,7 +49,8 @@ describe("configurations", () => {
       tools: { builtin: "default", mcpServers: [{ name: "memory", type: "http", target: "${MEMORY_URL:-http://host.docker.internal:9501}/mcp" }] },
       checks: ["memory server", "memory agent token"],
     });
-    expect(uploaded.body.files).toContain("files/.playwright/cli.config.json");
+    expect(uploaded.body.files).toContain("files/knowledge/INSTRUCTIONS.md");
+    expect(uploaded.body.files).not.toContain("files/.playwright/cli.config.json");
 
     await call("PUT", "/api/configurations/other", asUpload(minimalFiles()));
     let list = await call("GET", "/api/configurations");
@@ -102,6 +103,7 @@ describe("session", () => {
     ]);
     expect(existsSync(join(settings.workspaceDir, "session_01"))).toBe(true);
     expect(existsSync(join(settings.workspaceDir, ".claude", "skills", "get-logs", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(settings.workspaceDir, ".playwright", "cli.config.json"))).toBe(true);
 
     const [spawned] = fake.calls.spawned;
     expect(spawned).toMatchObject({ cwd: settings.workspaceDir, cols: 100, rows: 30 });

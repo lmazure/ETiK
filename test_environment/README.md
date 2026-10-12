@@ -47,7 +47,7 @@ configurations/squashtm/
   config.json         see below
   system-prompt.md    appended to Claude Code's system prompt (--append-system-prompt)
   skills/<name>/      skills not built into the image (browser-language, get-logs)
-  files/              copied into the workspace at each session start (knowledge/INSTRUCTIONS.md, .playwright/cli.config.json)
+  files/              copied into the workspace at each session start (knowledge/INSTRUCTIONS.md)
 ```
 
 `config.json`:
@@ -60,7 +60,7 @@ configurations/squashtm/
 | `hostPorts` | Ports Claude Code may reach on the host (`host.docker.internal`). |
 | `tools.builtin` | Claude Code built-in tools (`claude --tools`): `"default"` for all of them, or a list of names such as `["Bash", "Read", "Edit"]`. |
 | `tools.mcpServers` | MCP servers, in the `mcpServers` format of `.mcp.json` (`${VAR}` and `${VAR:-default}` are expanded by Claude Code). Only these are loaded (`--strict-mcp-config`). |
-| `skills` | Skill names: a folder `skills/<name>/` of the configuration, or a skill built into the image (`playwright-cli`). |
+| `skills` | Skill names: a folder `skills/<name>/` of the configuration, or a skill built into the image. A built-in skill also brings the files its installer wrote: `playwright-cli` comes with `.playwright/cli.config.json` (Chromium), which `files/` can override. |
 | `env` | Variables of the container (e.g. from `memory.env`) passed on to Claude Code. |
 | `checks` | `{name, url, headers}`: HTTP GETs that must answer 2xx before the session starts (`${VAR}` expanded from the container environment). |
 

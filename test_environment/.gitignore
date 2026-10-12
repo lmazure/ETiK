@@ -1,7 +1,4 @@
 *.png
-/.playwright
-/.playwright-cli
-/.claude
 /session_*
 /workspace/
 memory.env

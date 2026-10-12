@@ -6,10 +6,13 @@ export interface Settings {
   stateDir: string;
   /** Working directory of Claude Code; the session_## directories accumulate there. */
   workspaceDir: string;
-  /** Where the system prompt and the MCP configuration of the running session are written. */
+  /** Where the MCP configuration of the running session is written. */
   runDir: string;
-  /** Skills baked into the image, one directory per skill (e.g. playwright-cli). */
-  builtinSkillsDir: string;
+  /**
+   * Skills baked into the image: `<builtinDir>/<skill>/` is what the skill's installer produced,
+   * i.e. `.claude/skills/<skill>/` and the files it goes with (e.g. `.playwright/cli.config.json`).
+   */
+  builtinDir: string;
   firewallScript: string;
   /** User Claude Code runs as. */
   agentUser: string;
@@ -35,7 +38,7 @@ export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
     stateDir: env.ETIK_STATE_DIR ?? "/var/lib/etik",
     workspaceDir: env.ETIK_WORKSPACE_DIR ?? "/workspace",
     runDir: env.ETIK_RUN_DIR ?? "/run/etik",
-    builtinSkillsDir: env.ETIK_BUILTIN_SKILLS_DIR ?? "/opt/etik/builtin/.claude/skills",
+    builtinDir: env.ETIK_BUILTIN_DIR ?? "/opt/etik/builtin",
     firewallScript: env.ETIK_FIREWALL_SCRIPT ?? "/usr/local/bin/init-firewall.sh",
     agentUser: env.ETIK_AGENT_USER ?? "node",
     agentHome: env.ETIK_AGENT_HOME ?? "/home/node",

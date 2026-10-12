@@ -43,9 +43,13 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN npx -y playwright@"$(cat /etc/pw_version)" install --with-deps chromium
 
 # The playwright-cli skill, matching the pinned CLI version: a built-in skill that
-# configurations can select (CI=1 keeps the installer non-interactive).
-WORKDIR /opt/etik/builtin
-RUN CI=1 playwright-cli install --skills && test -f .claude/skills/playwright-cli/SKILL.md
+# configurations can select. Its installer also writes .playwright/cli.config.json
+# (Chromium); the console copies both into the workspace when the skill is selected.
+# CI=1 keeps the installer non-interactive.
+WORKDIR /opt/etik/builtin/playwright-cli
+RUN CI=1 playwright-cli install --skills \
+ && test -f .claude/skills/playwright-cli/SKILL.md \
+ && test -f .playwright/cli.config.json
 
 # The console.
 COPY --from=build /app/package.json /opt/etik/server/

@@ -119,7 +119,7 @@ export class SessionManager {
       }
 
       const session = nextSessionName(this.settings.workspaceDir);
-      prepareWorkspace(this.settings.workspaceDir, configuration, this.settings.builtinSkillsDir, session, this.deps.owner);
+      prepareWorkspace(this.settings.workspaceDir, configuration, this.settings.builtinDir, session, this.deps.owner);
       mkdirSync(this.settings.runDir, { recursive: true, mode: 0o755 });
       const mcpConfigFile = join(this.settings.runDir, "mcp.json");
       writeFileSync(mcpConfigFile, JSON.stringify({ mcpServers: config.tools.mcpServers }, null, 2), { mode: 0o644 });

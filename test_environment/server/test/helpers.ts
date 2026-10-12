@@ -26,19 +26,23 @@ export function minimalFiles(config: Record<string, unknown> = {}, extra: Record
   return files;
 }
 
-/** Temporary directories laid out like the container; the built-in skill playwright-cli exists. */
+/** Temporary directories laid out like the container; the built-in skill playwright-cli is installed. */
 export function testSettings(): Settings & { cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "etik-"));
-  const builtinSkillsDir = join(root, "builtin");
-  mkdirSync(join(builtinSkillsDir, "playwright-cli"), { recursive: true });
-  writeFileSync(join(builtinSkillsDir, "playwright-cli", "SKILL.md"), "---\nname: playwright-cli\n---\n");
+  // What `playwright-cli install --skills` produces in the image.
+  const builtinDir = join(root, "builtin");
+  const playwright = join(builtinDir, "playwright-cli");
+  mkdirSync(join(playwright, ".claude", "skills", "playwright-cli"), { recursive: true });
+  writeFileSync(join(playwright, ".claude", "skills", "playwright-cli", "SKILL.md"), "---\nname: playwright-cli\n---\n");
+  mkdirSync(join(playwright, ".playwright"));
+  writeFileSync(join(playwright, ".playwright", "cli.config.json"), JSON.stringify({ browser: { browserName: "chromium" } }));
   return {
     host: "127.0.0.1",
     port: 0,
     stateDir: join(root, "state"),
     workspaceDir: join(root, "workspace"),
     runDir: join(root, "run"),
-    builtinSkillsDir,
+    builtinDir,
     firewallScript: "/bin/false",
     agentUser: "node",
     agentHome: "/home/node",
