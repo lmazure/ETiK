@@ -19,7 +19,7 @@ Copy `memory.env.example` to `memory.env` and set `MEMORY_AGENT_TOKEN` to that a
    ```
    At start, the firewall only lets the container reach the Anthropic API and claude.ai (`docker logs etik` shows it).
 2. Open `http://localhost:7681` (another port: set `ETIK_PORT`, e.g. `ETIK_PORT=7700 docker compose up -d`).
-3. Click **Upload configuration folder…** and pick `configurations/squashtm`. The configuration is named after the folder; uploading a folder with the same name replaces it. The uploaded configurations are kept in the `etik-state` volume.
+3. Click **Upload configuration folder…** and pick `../test-configurations/squashtm`. The configuration is named after the folder; uploading a folder with the same name replaces it. The uploaded configurations are kept in the `etik-state` volume.
 4. Select the configuration and click **Start a session**. The console:
    - opens the firewall to the configuration's Internet domains and host ports;
    - runs its checks (here: the memory server answers and accepts the token);
@@ -43,7 +43,7 @@ To watch the memory while the agent works, open `http://localhost:9501/` on the 
 A configuration is a folder:
 
 ```
-configurations/squashtm/
+test-configurations/squashtm/
   config.json         see below
   system-prompt.md    appended to Claude Code's system prompt (--append-system-prompt)
   skills/<name>/      skills not built into the image (browser-language, get-logs)

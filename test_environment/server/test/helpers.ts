@@ -7,7 +7,7 @@ import type { Settings } from "../src/settings.js";
 import { listFiles } from "../src/store.js";
 
 /** The configuration shipped in the repository. */
-export const SQUASHTM_DIR = fileURLToPath(new URL("../../configurations/squashtm", import.meta.url));
+export const SQUASHTM_DIR = fileURLToPath(new URL("../../../test-configurations/squashtm", import.meta.url));
 
 export function readFolder(dir: string): Map<string, Buffer> {
   return new Map(listFiles(dir).map((path) => [path, readFileSync(join(dir, path))]));
