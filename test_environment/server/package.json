@@ -1,0 +1,38 @@
+{
+  "name": "etik-console",
+  "version": "0.1.0",
+  "description": "Web console of the ETiK test container: upload a configuration, start Claude Code with it, chat in a web terminal",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "start": "node dist/index.js",
+    "dev:web": "vite",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.6",
+    "@fastify/websocket": "^11.3.4",
+    "fastify": "^5.12.5",
+    "node-pty": "^1.1.0",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^24.19.1",
+    "@types/ws": "^8.18.2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "preact": "^11.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true
+  }
+}

@@ -4,9 +4,9 @@ You are in charge to perform some Exploratory Testing on SquashTM, a test manage
 
 This project is organized as follows:
 
-- `CLAUDE.md` — read only — this file: the instructions governing how Exploratory Test Sessions are run.
+- These instructions (your system prompt) govern how Exploratory Test Sessions are run.
 - `knowledge/INSTRUCTIONS.md` — read only — the format and update rules for the knowledge base, the durable cross-Session memory about the SUT. The knowledge base itself is not on disk: it lives in the memory server (see "Cross-Session Memory").
-- `session_##/` — one directory per Exploratory Test Session (`##` is a two-digit counter). The directory of the current Session is created by the launcher (`start-session.sh`) and its name is in the environment variable `MEMORY_SESSION`. It is filled while the Session runs:
+- `session_##/` — one directory per Exploratory Test Session (`##` is a two-digit counter). The directory of the current Session is created when the Session is started from the ETiK console, and its name is in the environment variable `MEMORY_SESSION`. It is filled while the Session runs:
   - `session_##/charter.md` — the approved Exploratory Test Charter of the Session .
   - `session_##/checklist.md` — the hierarchical test checklist with checkboxes (updated as tests are performed).
   - `session_##/log.md` — the replay trace: every action and check performed, plus test-strategy rationale and analysis conclusions.
@@ -27,7 +27,7 @@ Do not use any other memory (local files, other memory tools) for SUT knowledge.
 
 ### Stage 1 - Define the Exploratory Test Charter
 
-First, run `echo "$MEMORY_SESSION"` to get the name of the current Session (e.g. `session_03`): `session_##` in these instructions stands for it, and its directory already exists. If it is empty, you were not started by `start-session.sh`: ask the user to restart you with `./start-session.sh` and stop.
+First, run `echo "$MEMORY_SESSION"` to get the name of the current Session (e.g. `session_03`): `session_##` in these instructions stands for it, and its directory already exists. If it is empty, you were not started from the ETiK console: ask the user to start a new Session from the ETiK console and stop.
 
 If the user has not provided an ET Charter, ask them.  
 

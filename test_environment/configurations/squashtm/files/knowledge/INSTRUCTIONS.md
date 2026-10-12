@@ -2,7 +2,7 @@
 
 The knowledge base is a durable, cross-Session memory about the SUT. It lives in the **memory server**, in the store `squashtm`, and is reached **only** through the `memory_*` tools (`memory_list`, `memory_read`, `memory_search`, `memory_write`, `memory_edit`, `memory_move`, `memory_delete`, `memory_batch`, `memory_history`). It is a set of Markdown **documents** addressed by path (e.g. `/entities/requirement.md`).
 
-The memory server keeps every version of every document and records, for each change, the Session that made it (the launcher sends `$MEMORY_SESSION` with every call) and its `change_note`. Nothing is ever lost: an overwritten passage or a deleted document can always be found in the history. People watch the knowledge base live in the memory server's web app.
+The memory server keeps every version of every document and records, for each change, the Session that made it (the ETiK console sets `$MEMORY_SESSION`, which is sent with every call) and its `change_note`. Nothing is ever lost: an overwritten passage or a deleted document can always be found in the history. People watch the knowledge base live in the memory server's web app.
 
 Never keep SUT knowledge in local files, and never fall back to local files: if the `memory_*` tools are missing or report that the server is unreachable, tell the user and stop.
 

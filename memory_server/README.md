@@ -96,13 +96,13 @@ Deleting is a soft delete: the document leaves listings and its path is free aga
 
 ## Security model
 
-The agent may run with full shell access (e.g. Claude Code in YOLO mode in a dev container). It can then read its own MCP configuration and call `/api` directly, so the design must hold even when MCP is bypassed:
+The agent may run with full shell access (e.g. Claude Code in YOLO mode in the test container). It can then read its own MCP configuration and call `/api` directly, so the design must hold even when MCP is bypassed:
 
 - Every rule is enforced in the core; the MCP and REST layers only translate and format.
 - Three kinds of tokens: an **agent** token reaches only its own store, read and write, without admin operation (restore); the **viewer** token reads every store and never writes (meant for the web app; refused on `/mcp`); the **admin** token reaches everything.
 - Store and session come from headers set in the harness configuration, never from tool arguments; the core writes them into the history.
 - History and soft delete are the undo for a wrong deletion. Volume backups stay out of the agent's reach.
-- The memory host and port must be allowed in the dev container's firewall allowlist.
+- The memory host port must be allowed by the test container's firewall: `hostPorts` of the configuration.
 - The web app shows content written by an agent that browses untrusted pages: HTML found in a memory is displayed as escaped text, never interpreted; a strict Content-Security-Policy forbids inline scripts and external resources.
 
 ## Run
@@ -184,12 +184,12 @@ Reload the page to start from the current state again. Links are shareable (`#/s
 
 ## Use in the test environment
 
-The test dev container (`../test_environment/`) uses the store `squashtm`:
+The test container (`../test_environment/`) uses the store `squashtm`, through its configuration `configurations/squashtm/`:
 
-- `.mcp.json` registers `/mcp` for Claude Code, with the agent token, the store and the session taken from the environment (`MEMORY_AGENT_TOKEN`, `MEMORY_STORE`, `MEMORY_SESSION`; `MEMORY_URL` defaults to `http://host.docker.internal:9501`).
-- `start-session.sh` reads the token from `memory.env`, checks that the server answers and accepts it, creates the next `session_##` directory and starts Claude Code with `MEMORY_SESSION` set to its name, so every change is recorded with its Exploratory Test Session.
-- `.devcontainer/init-firewall.sh` allows the memory server's host port.
-- `knowledge/INSTRUCTIONS.md` is the policy (documents, entity schema, source tags, capture and consolidation) expressed with the tools. There is no index document: `memory_list` returns each document's description.
+- `config.json` registers `/mcp` for Claude Code (`tools.mcpServers`), with the agent token, the store and the session taken from the environment (`MEMORY_AGENT_TOKEN`, `MEMORY_STORE`, `MEMORY_SESSION`; `MEMORY_URL` defaults to `http://host.docker.internal:9501`).
+- The container reads the token from `memory.env`. When a session starts, the ETiK console checks that the server answers and accepts the token (`checks`), creates the next `session_##` directory and starts Claude Code with `MEMORY_SESSION` set to its name, so every change is recorded with its Exploratory Test Session.
+- `hostPorts` allows the memory server's host port in the container's firewall.
+- `files/knowledge/INSTRUCTIONS.md` is the policy (documents, entity schema, source tags, capture and consolidation) expressed with the tools. There is no index document: `memory_list` returns each document's description.
 
 ## Not done yet
 
