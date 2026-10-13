@@ -78,6 +78,23 @@ button.link:hover:not(:disabled) { text-decoration: underline; }
 .details dd { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
 .details dd > div { width: 100%; }
 .files { padding-left: 16px; max-height: 200px; overflow-y: auto; }
+.files button.link, .details dd button.link { text-align: left; overflow-wrap: anywhere; }
+
+dialog.viewer {
+  width: min(900px, 90vw);
+  max-height: 85vh;
+  padding: 0;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+dialog.viewer[open] { display: flex; flex-direction: column; }
+dialog.viewer::backdrop { background: rgb(0 0 0 / 0.45); }
+dialog.viewer header { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+dialog.viewer header code { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+dialog.viewer > p, dialog.viewer > pre.error { margin: 12px; }
+.file-content { flex: 1; min-height: 0; overflow: auto; white-space: pre; margin: 0; padding: 8px 12px; background: var(--bg-soft); }
 
 .status { font-weight: 600; text-transform: uppercase; font-size: 12px; padding: 1px 6px; border-radius: 3px; border: 1px solid currentColor; }
 .status.idle { color: var(--muted); }

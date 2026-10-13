@@ -15,6 +15,13 @@ export interface ConfigurationSummary {
   uploadedAt: string;
 }
 
+/** A file of a configuration; `content` is null for a binary file. */
+export interface ConfigurationFile {
+  path: string;
+  size: number;
+  content: string | null;
+}
+
 /** A stored configuration that no longer validates (e.g. a built-in skill gone with a new image). */
 export interface BrokenConfiguration {
   id: string;
@@ -50,6 +57,9 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
 
 export const listConfigurations = () =>
   call<{ builtinSkills: string[]; configurations: ConfigurationEntry[] }>("GET", "/api/configurations");
+
+export const readConfigurationFile = (id: string, path: string) =>
+  call<ConfigurationFile>("GET", `/api/configurations/${encodeURIComponent(id)}/files/${path.split("/").map(encodeURIComponent).join("/")}`);
 
 export const deleteConfiguration = (id: string) => call<void>("DELETE", `/api/configurations/${encodeURIComponent(id)}`);
 

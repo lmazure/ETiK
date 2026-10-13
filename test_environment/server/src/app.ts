@@ -57,6 +57,16 @@ export function summary(configuration: Configuration) {
   };
 }
 
+/** The text of a file, or null for binary content (a NUL byte or invalid UTF-8). */
+function text(content: Buffer): string | null {
+  if (content.includes(0)) return null;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(content);
+  } catch {
+    return null;
+  }
+}
+
 function errorHandler(error: FastifyError | Error, _request: FastifyRequest, reply: FastifyReply) {
   if (error instanceof ConfigurationError) return reply.code(error.statusCode).send({ error: error.message, problems: error.problems });
   if (error instanceof SessionError) return reply.code(error.statusCode).send({ error: error.message });
@@ -107,6 +117,11 @@ export function buildApp(
       files.set(path, Buffer.from(file.content, "base64"));
     }
     return summary(store.save(request.params.id, files));
+  });
+
+  app.get<{ Params: { id: string; "*": string } }>("/api/configurations/:id/files/*", async (request) => {
+    const content = store.readFile(request.params.id, request.params["*"]);
+    return { path: relativePath(request.params["*"]), size: content.length, content: text(content) };
   });
 
   app.delete<{ Params: { id: string } }>("/api/configurations/:id", async (request, reply) => {

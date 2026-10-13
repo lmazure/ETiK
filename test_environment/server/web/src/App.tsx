@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import {
-  type ConfigurationEntry, type ConfigurationSummary, deleteConfiguration, listConfigurations, type SessionState,
-  startSession, stopSession, uploadConfiguration,
+  type ConfigurationEntry, type ConfigurationFile, type ConfigurationSummary, deleteConfiguration, listConfigurations,
+  readConfigurationFile, type SessionState, startSession, stopSession, uploadConfiguration,
 } from "./api.js";
 import { Terminal, type TerminalHandle } from "./Terminal.js";
 
@@ -126,6 +126,7 @@ export function App() {
 }
 
 function Details({ configuration }: { configuration: ConfigurationEntry }) {
+  const [viewed, setViewed] = useState<string | undefined>(undefined);
   if (!isSummary(configuration)) {
     return (
       <section>
@@ -139,7 +140,7 @@ function Details({ configuration }: { configuration: ConfigurationEntry }) {
     <section class="details">
       <h2>{c.name}</h2>
       <dl>
-        <dt>System prompt</dt><dd><code>{c.systemPrompt}</code></dd>
+        <dt>System prompt</dt><dd><FileLink path={c.systemPrompt} onView={setViewed} /></dd>
         <dt>Internet domains</dt><dd>{c.domains.length ? c.domains.map((d) => <code key={d}>{d}</code>) : <span class="muted">none</span>} <span class="muted small">+ Anthropic</span></dd>
         <dt>Host ports</dt><dd>{c.hostPorts.length ? c.hostPorts.map((p) => <code key={p}>{p}</code>) : <span class="muted">none</span>}</dd>
         <dt>Built-in tools</dt><dd>{c.tools.builtin === "default" ? <span>all (<code>default</code>)</span> : c.tools.builtin.length ? c.tools.builtin.map((t) => <code key={t}>{t}</code>) : <span class="muted">none</span>}</dd>
@@ -150,8 +151,49 @@ function Details({ configuration }: { configuration: ConfigurationEntry }) {
       </dl>
       <details>
         <summary class="small">{c.files.length} files, uploaded {new Date(c.uploadedAt).toLocaleString()}</summary>
-        <ul class="files small">{c.files.map((f) => <li key={f}><code>{f}</code></li>)}</ul>
+        <ul class="files small">{c.files.map((f) => <li key={f}><FileLink path={f} onView={setViewed} /></li>)}</ul>
       </details>
+      {viewed !== undefined && <FileViewer configuration={c.id} path={viewed} onClose={() => setViewed(undefined)} />}
     </section>
+  );
+}
+
+function FileLink({ path, onView }: { path: string; onView: (path: string) => void }) {
+  return <button class="link" title="View this file" onClick={() => onView(path)}><code>{path}</code></button>;
+}
+
+/** Shows the content of a configuration file, read-only, in a modal dialog. */
+function FileViewer({ configuration, path, onClose }: { configuration: string; path: string; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [file, setFile] = useState<ConfigurationFile | undefined>(undefined);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    dialog.current?.showModal();
+    let cancelled = false;
+    readConfigurationFile(configuration, path).then(
+      (result) => { if (!cancelled) setFile(result); },
+      (e: Error) => { if (!cancelled) setError(e.message); },
+    );
+    return () => { cancelled = true; };
+  }, [configuration, path]);
+
+  return (
+    // Escape closes the dialog (close event), and so does a click on the backdrop (outside the dialog's box).
+    <dialog ref={dialog} class="viewer" onClose={onClose} onClick={(event) => {
+      const box = event.currentTarget.getBoundingClientRect();
+      const inside = event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
+      if (!inside) event.currentTarget.close();
+    }}>
+      <header>
+        <code>{path}</code>
+        {file && <span class="muted small">{file.size} bytes</span>}
+        <button onClick={() => dialog.current?.close()}>Close</button>
+      </header>
+      {error ? <pre class="error">{error}</pre>
+        : !file ? <p class="muted">Loading…</p>
+        : file.content === null ? <p class="muted">Binary file ({file.size} bytes), not shown.</p>
+        : <pre class="file-content">{file.content}</pre>}
+    </dialog>
   );
 }

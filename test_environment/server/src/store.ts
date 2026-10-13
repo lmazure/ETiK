@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { checkId, CONFIG_FILE, type ConfigFile, ConfigurationError, validateConfiguration } from "./configuration.js";
+import { checkId, CONFIG_FILE, type ConfigFile, ConfigurationError, relativePath, validateConfiguration } from "./configuration.js";
 
 export interface Configuration {
   id: string;
@@ -47,6 +47,14 @@ export class ConfigurationStore {
     // Validated again: a built-in skill may have disappeared with a new image.
     const config = validateConfiguration(files, this.builtinSkills());
     return { id, config, files: [...files.keys()].sort(), uploadedAt: statSync(dir).mtime.toISOString(), dir };
+  }
+
+  /** Content of one file of a configuration (path relative to its folder). */
+  readFile(id: string, path: string): Buffer {
+    const configuration = this.get(id);
+    const relative = relativePath(path);
+    if (!configuration.files.includes(relative)) throw new ConfigurationError([`unknown file '${relative}'`], 404);
+    return readFileSync(join(configuration.dir, relative));
   }
 
   list(): Array<Configuration | { id: string; problems: string[] }> {

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { SessionManager } from "../src/session.js";
 import { ConfigurationStore } from "../src/store.js";
-import { fakeDeps, minimalFiles, settle, squashtmFiles, testSettings } from "./helpers.js";
+import { fakeDeps, minimalFiles, settle, SQUASHTM_DIR, squashtmFiles, testSettings } from "./helpers.js";
 
 let settings: ReturnType<typeof testSettings>;
 let fake: ReturnType<typeof fakeDeps>;
@@ -64,6 +64,22 @@ describe("configurations", () => {
     expect((await call("DELETE", "/api/configurations/other")).status).toBe(204);
     expect((await call("DELETE", "/api/configurations/other")).status).toBe(404);
     expect((await call("GET", "/api/configurations")).body.configurations).toHaveLength(1);
+  });
+
+  it("serves the content of a configuration file", async () => {
+    await call("PUT", "/api/configurations/squashtm", asUpload(squashtmFiles()));
+    const expected = readFileSync(join(SQUASHTM_DIR, "files/knowledge/INSTRUCTIONS.md"));
+    const file = await call("GET", "/api/configurations/squashtm/files/files/knowledge/INSTRUCTIONS.md");
+    expect(file.status).toBe(200);
+    expect(file.body).toEqual({ path: "files/knowledge/INSTRUCTIONS.md", size: expected.length, content: expected.toString("utf8") });
+    expect((await call("GET", "/api/configurations/squashtm/files/config.json")).body.content).toContain("SquashTM");
+
+    expect((await call("GET", "/api/configurations/squashtm/files/nowhere.md")).status).toBe(404);
+    expect((await call("GET", "/api/configurations/nowhere/files/config.json")).status).toBe(404);
+    expect((await call("GET", "/api/configurations/squashtm/files/files/..%2F..%2Fsquashtm%2Fconfig.json")).status).toBe(400);
+
+    await call("PUT", "/api/configurations/binary", asUpload(minimalFiles({}, { "data.bin": "a\0b" })));
+    expect((await call("GET", "/api/configurations/binary/files/data.bin")).body).toEqual({ path: "data.bin", size: 3, content: null });
   });
 
   it("rejects invalid uploads with the list of problems", async () => {
