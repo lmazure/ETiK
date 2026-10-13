@@ -20,7 +20,7 @@
       }
     }
   },
-  "skills": ["playwright-cli", "browser-language", "get-logs"],
+  "skills": ["browser-language", "get-logs"],
   "env": ["MEMORY_URL", "MEMORY_AGENT_TOKEN"],
   "checks": [
     {

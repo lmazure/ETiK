@@ -44,7 +44,7 @@ export class ConfigurationStore {
     if (!existsSync(join(dir, CONFIG_FILE))) throw new ConfigurationError([`unknown configuration '${id}'`], 404);
     const files = new Map<string, Buffer>();
     for (const path of listFiles(dir)) files.set(path, readFileSync(join(dir, path)));
-    // Validated again: a built-in skill may have disappeared with a new image.
+    // Validated again: a new image may have new built-in skills or rules.
     const config = validateConfiguration(files, this.builtinSkills());
     return { id, config, files: [...files.keys()].sort(), uploadedAt: statSync(dir).mtime.toISOString(), dir };
   }

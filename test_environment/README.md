@@ -22,7 +22,7 @@ Copy `memory.env.example` to `memory.env` and set `MEMORY_AGENT_TOKEN` to that a
    - opens the firewall to the configuration's Internet domains and host ports;
    - runs its checks (e.g. the memory server answers and the token reaches the configuration's store);
    - creates the next `workspace/session_##/` directory;
-   - installs the configuration's skills in `workspace/.claude/skills/` and copies its `files/` into `workspace/`;
+   - installs the built-in skills and the configuration's skills in `workspace/.claude/skills/` and copies its `files/` into `workspace/`;
    - starts Claude Code in `workspace/` with the system prompt, the built-in tools and the MCP servers of the configuration, and `MEMORY_SESSION` set to the session name.
 
    Its progress, then Claude Code, appear in the terminal.
@@ -44,7 +44,7 @@ A configuration is a folder:
 <configuration>/
   config.json         see below
   system-prompt.md    appended to Claude Code's system prompt (--append-system-prompt)
-  skills/<name>/      skills not built into the image
+  skills/<name>/      skills of the configuration
   files/              copied into the workspace at each session start
 ```
 
@@ -58,7 +58,7 @@ A configuration is a folder:
 | `hostPorts` | Ports Claude Code may reach on the host (`host.docker.internal`). |
 | `tools.builtin` | Claude Code built-in tools (`claude --tools`): `"default"` for all of them, or a list of names such as `["Bash", "Read", "Edit"]`. |
 | `tools.mcpServers` | MCP servers, in the `mcpServers` format of `.mcp.json` (`${VAR}` and `${VAR:-default}` are expanded by Claude Code). Only these are loaded (`--strict-mcp-config`). |
-| `skills` | Skill names: a folder `skills/<name>/` of the configuration, or a skill built into the image. A built-in skill also brings the files its installer wrote: `playwright-cli` comes with `.playwright/cli.config.json` (Chromium), which `files/` can override. |
+| `skills` | Names of the configuration's skills, each a folder `skills/<name>/`. The skills built into the image (`playwright-cli`) are always installed and must not be listed; a configuration skill of the same name replaces a built-in one. A built-in skill also brings the files its installer wrote: `playwright-cli` comes with `.playwright/cli.config.json` (Chromium), which `files/` can override. |
 | `env` | Variables of the container (e.g. from `memory.env`) passed on to Claude Code. |
 | `checks` | `{name, url, headers}`: HTTP GETs that must answer 2xx before the session starts (`${VAR}` expanded from the container environment). |
 

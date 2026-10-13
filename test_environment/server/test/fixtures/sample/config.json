@@ -17,7 +17,7 @@
       }
     }
   },
-  "skills": ["playwright-cli", "local-skill"],
+  "skills": ["local-skill"],
   "env": ["MEMORY_URL", "MEMORY_AGENT_TOKEN"],
   "checks": [
     {

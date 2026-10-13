@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ConfigurationStore } from "../src/store.js";
@@ -27,7 +27,7 @@ describe("nextSessionName", () => {
 });
 
 describe("prepareWorkspace", () => {
-  it("creates the session directory, installs exactly the selected skills and copies files/", () => {
+  it("creates the session directory, installs the built-in and configuration skills and copies files/", () => {
     const configuration = store.save("sample", sampleFiles());
     const skills = join(settings.workspaceDir, ".claude", "skills");
     mkdirSync(join(skills, "stale"), { recursive: true });
@@ -51,9 +51,16 @@ describe("prepareWorkspace", () => {
   });
 
   it("lets files/ override the files of a built-in skill", () => {
-    const configuration = store.save("c", minimalFiles({ skills: ["playwright-cli"] }, { "files/.playwright/cli.config.json": "{\"mine\": true}" }));
+    const configuration = store.save("c", minimalFiles({}, { "files/.playwright/cli.config.json": "{\"mine\": true}" }));
     prepareWorkspace(settings.workspaceDir, configuration, settings.builtinDir, "session_01", undefined);
     expect(readFileSync(join(settings.workspaceDir, ".playwright", "cli.config.json"), "utf8")).toBe("{\"mine\": true}");
+  });
+
+  it("installs the built-in skills when the configuration has none", () => {
+    const configuration = store.save("c", minimalFiles());
+    prepareWorkspace(settings.workspaceDir, configuration, settings.builtinDir, "session_01", undefined);
+    expect(readdirSync(join(settings.workspaceDir, ".claude", "skills"))).toEqual(["playwright-cli"]);
+    expect(existsSync(join(settings.workspaceDir, ".playwright", "cli.config.json"))).toBe(true);
   });
 
   it("prefers an uploaded skill to a built-in one of the same name, without the built-in files", () => {

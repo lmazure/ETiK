@@ -21,8 +21,9 @@ export function nextSessionName(workspaceDir: string): string {
 /**
  * Prepares the workspace for a session of `configuration`:
  * - creates the session directory;
- * - replaces `.claude/skills/` with exactly the selected skills;
- *   a built-in skill also brings the other files its installer produced (e.g. `.playwright/cli.config.json`);
+ * - replaces `.claude/skills/` with the built-in skills and the configuration's skills;
+ *   a built-in skill also brings the other files its installer produced (e.g. `.playwright/cli.config.json`),
+ *   unless the configuration has its own skill of the same name, which replaces it;
  * - copies the configuration's `files/` over the workspace, last, so that they can override built-in files.
  * Everything written is given to `owner` (the agent user) when set.
  */
@@ -40,17 +41,16 @@ export function prepareWorkspace(
   const skillsDir = join(claudeDir, "skills");
   rmSync(skillsDir, { recursive: true, force: true });
   mkdirSync(skillsDir, { recursive: true });
-  for (const skill of configuration.config.skills) {
-    const uploaded = join(configuration.dir, SKILLS_DIR, skill);
-    if (existsSync(uploaded)) {
-      cpSync(uploaded, join(skillsDir, skill), { recursive: true });
-      continue;
-    }
+  for (const skill of builtinSkills(builtinDir)) {
+    if (configuration.config.skills.includes(skill)) continue;
     const installed = join(builtinDir, skill);
     cpSync(join(installed, ".claude", "skills", skill), join(skillsDir, skill), { recursive: true });
     for (const entry of readdirSync(installed)) {
       if (entry !== ".claude") copyInto(workspaceDir, installed, entry, owner);
     }
+  }
+  for (const skill of configuration.config.skills) {
+    cpSync(join(configuration.dir, SKILLS_DIR, skill), join(skillsDir, skill), { recursive: true });
   }
   chown(claudeDir, owner);
 

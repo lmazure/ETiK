@@ -9,6 +9,7 @@ const isSummary = (entry: ConfigurationEntry): entry is ConfigurationSummary => 
 
 export function App() {
   const [configurations, setConfigurations] = useState<ConfigurationEntry[]>([]);
+  const [builtinSkills, setBuiltinSkills] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | undefined>(undefined);
   const [state, setState] = useState<SessionState>({ status: "idle" });
   const [connected, setConnected] = useState(false);
@@ -19,7 +20,8 @@ export function App() {
 
   const refresh = useCallback(async (select?: string) => {
     try {
-      const { configurations } = await listConfigurations();
+      const { builtinSkills, configurations } = await listConfigurations();
+      setBuiltinSkills(builtinSkills);
       setConfigurations(configurations);
       setSelected((current) => {
         const wanted = select ?? current;
@@ -92,7 +94,7 @@ export function App() {
           <p class="muted small">Uploading a folder with the name of an existing configuration replaces it.</p>
         </section>
 
-        {current && <Details configuration={current} />}
+        {current && <Details configuration={current} builtinSkills={builtinSkills} />}
 
         <section>
           <h2>Session</h2>
@@ -125,7 +127,7 @@ export function App() {
   );
 }
 
-function Details({ configuration }: { configuration: ConfigurationEntry }) {
+function Details({ configuration, builtinSkills }: { configuration: ConfigurationEntry; builtinSkills: string[] }) {
   const [viewed, setViewed] = useState<string | undefined>(undefined);
   if (!isSummary(configuration)) {
     return (
@@ -145,7 +147,7 @@ function Details({ configuration }: { configuration: ConfigurationEntry }) {
         <dt>Host ports</dt><dd>{c.hostPorts.length ? c.hostPorts.map((p) => <code key={p}>{p}</code>) : <span class="muted">none</span>}</dd>
         <dt>Built-in tools</dt><dd>{c.tools.builtin === "default" ? <span>all (<code>default</code>)</span> : c.tools.builtin.length ? c.tools.builtin.map((t) => <code key={t}>{t}</code>) : <span class="muted">none</span>}</dd>
         <dt>MCP servers</dt><dd>{c.tools.mcpServers.length ? c.tools.mcpServers.map((s) => <div key={s.name}><code>{s.name}</code> <span class="muted small">{s.type} {s.target}</span></div>) : <span class="muted">none</span>}</dd>
-        <dt>Skills</dt><dd>{c.skills.length ? c.skills.map((s) => <code key={s}>{s}</code>) : <span class="muted">none</span>}</dd>
+        <dt>Skills</dt><dd>{c.skills.length ? c.skills.map((s) => <code key={s}>{s}</code>) : <span class="muted">none</span>} {builtinSkills.length > 0 && <span class="muted small">+ built-in {builtinSkills.join(", ")}</span>}</dd>
         <dt>Environment</dt><dd>{c.env.length ? c.env.map((e) => <code key={e}>{e}</code>) : <span class="muted">none</span>}</dd>
         <dt>Checks</dt><dd>{c.checks.length ? c.checks.join(", ") : <span class="muted">none</span>}</dd>
       </dl>

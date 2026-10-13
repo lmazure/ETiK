@@ -5,7 +5,7 @@ import { z } from "zod";
  * A configuration is a folder:
  * - `config.json` (see `configSchema`);
  * - the system prompt file it names;
- * - `skills/<name>/` for each skill that is not built into the image;
+ * - `skills/<name>/` for each of its skills (the skills built into the image are always installed);
  * - `files/`, copied as-is into the workspace at each session start.
  */
 export const CONFIG_FILE = "config.json";
@@ -37,7 +37,7 @@ export const configSchema = z.strictObject({
     /** MCP servers, in the `mcpServers` format of `.mcp.json`; `${VAR}` is expanded by Claude Code. */
     mcpServers: z.record(name, z.record(z.string(), z.unknown())).default({}),
   }),
-  /** Skills: a folder `skills/<name>/` of the configuration, or a skill built into the image. */
+  /** Skills of the configuration, each a folder `skills/<name>/`; the built-in skills are always installed and are not listed. */
   skills: z.array(name).default([]),
   /** Environment variables of the container passed on to Claude Code (e.g. tokens from memory.env). */
   env: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "must be an environment variable name")).default([]),
@@ -75,7 +75,7 @@ export function relativePath(raw: string): string {
 
 /**
  * Validates the files of a configuration folder (paths relative to the folder) and returns its config.json.
- * `builtinSkills` are the skills baked into the image.
+ * `builtinSkills` are the skills baked into the image: listing one without uploading it is an error.
  */
 export function validateConfiguration(files: ReadonlyMap<string, Buffer>, builtinSkills: readonly string[]): ConfigFile {
   const problems: string[] = [];
@@ -110,9 +110,10 @@ export function validateConfiguration(files: ReadonlyMap<string, Buffer>, builti
   }
   if (promptPath !== undefined && !files.has(promptPath)) problems.push(`the system prompt file '${config.systemPrompt}' is missing`);
   for (const skill of config.skills) {
-    if (!files.has(`${SKILLS_DIR}/${skill}/SKILL.md`) && !builtinSkills.includes(skill)) {
-      problems.push(`skill '${skill}': neither ${SKILLS_DIR}/${skill}/SKILL.md nor a built-in skill (${builtinSkills.join(", ") || "none"})`);
-    }
+    if (files.has(`${SKILLS_DIR}/${skill}/SKILL.md`)) continue;
+    problems.push(builtinSkills.includes(skill)
+      ? `skill '${skill}': built into the image, always installed, remove it from skills`
+      : `skill '${skill}': ${SKILLS_DIR}/${skill}/SKILL.md is missing`);
   }
   if (problems.length > 0) throw new ConfigurationError(problems);
   return config;

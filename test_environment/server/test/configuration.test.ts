@@ -21,7 +21,7 @@ describe("validateConfiguration", () => {
     expect(config.hostPorts).toEqual([8080, 9501]);
     expect(config.tools.builtin).toBe("default");
     expect(Object.keys(config.tools.mcpServers)).toEqual(["memory"]);
-    expect(config.skills).toEqual(["playwright-cli", "local-skill"]);
+    expect(config.skills).toEqual(["local-skill"]);
   });
 
   it("accepts every configuration of the repository", () => {
@@ -73,10 +73,14 @@ describe("validateConfiguration", () => {
     expect(found.join("\n")).toContain("extra");
   });
 
-  it("resolves skills in the configuration or among the built-in ones", () => {
+  it("requires the skills in the configuration and rejects listing a built-in one", () => {
     const files = minimalFiles({ skills: ["mine", "playwright-cli", "nowhere"] }, { "skills/mine/SKILL.md": "x" });
-    expect(problems(() => validateConfiguration(files, ["playwright-cli"])))
-      .toEqual(["skill 'nowhere': neither skills/nowhere/SKILL.md nor a built-in skill (playwright-cli)"]);
+    expect(problems(() => validateConfiguration(files, ["playwright-cli"]))).toEqual([
+      "skill 'playwright-cli': built into the image, always installed, remove it from skills",
+      "skill 'nowhere': skills/nowhere/SKILL.md is missing",
+    ]);
+    const replaced = minimalFiles({ skills: ["playwright-cli"] }, { "skills/playwright-cli/SKILL.md": "x" });
+    expect(validateConfiguration(replaced, ["playwright-cli"]).skills).toEqual(["playwright-cli"]);
   });
 });
 
