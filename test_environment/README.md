@@ -5,11 +5,9 @@ It includes the **ETiK console**, a small web server: from a browser on the host
 
 ## Prerequisites
 
-On the host:
-- SquashTM listening on port 8090, e.g. started with Docker Compose as described in the [SquashTM Docker quick start](https://tm-en.doc.squashtest.com/latest/install-guide/installation/install-squash/docker-install.html#quick-start), with its port published on 8090.
-- The memory server listening on port 9501 (see `../memory_server/README.md`), with an agent token for the store `squashtm`.
+On the host, what the configuration needs: the application under test and, usually, the memory server listening on port 9501 (see `../memory_server/README.md`) with an agent token for the configuration's memory store. The configurations of this repository and their prerequisites are described in [`../test-configurations/README.md`](../test-configurations/README.md).
 
-Copy `memory.env.example` to `memory.env` and set `MEMORY_AGENT_TOKEN` to that agent token (the value after `squashtm=` in `MEMORY_AGENT_TOKENS` of `../memory_server/.env`). `memory.env` is gitignored. Its variables are passed to Claude Code only when the configuration lists them in `env`; it only holds the agent's own token, the admin token stays outside the container.
+Copy `memory.env.example` to `memory.env` and set `MEMORY_AGENT_TOKEN` to that agent token (the value after `<store>=` in `MEMORY_AGENT_TOKENS` of `../memory_server/.env`; a token listed there for several stores reaches all of them). `memory.env` is gitignored. Its variables are passed to Claude Code only when the configuration lists them in `env`; it only holds the agent's own token, the admin token stays outside the container.
 
 ## Usage
 
@@ -19,10 +17,10 @@ Copy `memory.env.example` to `memory.env` and set `MEMORY_AGENT_TOKEN` to that a
    ```
    At start, the firewall only lets the container reach the Anthropic API and claude.ai (`docker logs etik` shows it).
 2. Open `http://localhost:7681` (another port: set `ETIK_PORT`, e.g. `ETIK_PORT=7700 docker compose up -d`).
-3. Click **Upload configuration folder…** and pick `../test-configurations/squashtm`. The configuration is named after the folder; uploading a folder with the same name replaces it. The uploaded configurations are kept in the `etik-state` volume. The details of the selected configuration list its files: click a file name (or the system prompt) to view its content.
+3. Click **Upload configuration folder…** and pick a configuration folder, e.g. one in `../test-configurations/`. The configuration is named after the folder; uploading a folder with the same name replaces it. The uploaded configurations are kept in the `etik-state` volume. The details of the selected configuration list its files: click a file name (or the system prompt) to view its content.
 4. Select the configuration and click **Start a session**. The console:
    - opens the firewall to the configuration's Internet domains and host ports;
-   - runs its checks (here: the memory server answers and accepts the token);
+   - runs its checks (e.g. the memory server answers and the token reaches the configuration's store);
    - creates the next `workspace/session_##/` directory;
    - installs the configuration's skills in `workspace/.claude/skills/` and copies its `files/` into `workspace/`;
    - starts Claude Code in `workspace/` with the system prompt, the built-in tools and the MCP servers of the configuration, and `MEMORY_SESSION` set to the session name.
@@ -43,11 +41,11 @@ To watch the memory while the agent works, open `http://localhost:9501/` on the 
 A configuration is a folder:
 
 ```
-test-configurations/squashtm/
+<configuration>/
   config.json         see below
   system-prompt.md    appended to Claude Code's system prompt (--append-system-prompt)
-  skills/<name>/      skills not built into the image (browser-language, get-logs)
-  files/              copied into the workspace at each session start (knowledge/INSTRUCTIONS.md)
+  skills/<name>/      skills not built into the image
+  files/              copied into the workspace at each session start
 ```
 
 `config.json`:
@@ -63,6 +61,8 @@ test-configurations/squashtm/
 | `skills` | Skill names: a folder `skills/<name>/` of the configuration, or a skill built into the image. A built-in skill also brings the files its installer wrote: `playwright-cli` comes with `.playwright/cli.config.json` (Chromium), which `files/` can override. |
 | `env` | Variables of the container (e.g. from `memory.env`) passed on to Claude Code. |
 | `checks` | `{name, url, headers}`: HTTP GETs that must answer 2xx before the session starts (`${VAR}` expanded from the container environment). |
+
+The memory store is a parameter of the configuration: the `X-Memory-Store` header of its memory MCP server, e.g. `"X-Memory-Store": "my-store"`, and a check on `${MEMORY_URL:-http://host.docker.internal:9501}/api/stores/my-store/list?depth=1&limit=1` with the agent token, which fails if the token cannot reach the store.
 
 To allow another Web site or host port, edit `config.json`, upload the folder again and start a new session.
 

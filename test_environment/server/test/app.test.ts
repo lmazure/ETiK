@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { SessionManager } from "../src/session.js";
 import { ConfigurationStore } from "../src/store.js";
-import { fakeDeps, minimalFiles, settle, SQUASHTM_DIR, squashtmFiles, testSettings } from "./helpers.js";
+import { fakeDeps, minimalFiles, SAMPLE_DIR, sampleFiles, settle, testSettings } from "./helpers.js";
 
 let settings: ReturnType<typeof testSettings>;
 let fake: ReturnType<typeof fakeDeps>;
@@ -40,22 +40,22 @@ const asUpload = (files: Map<string, Buffer>) => ({
 
 describe("configurations", () => {
   it("uploads, lists, replaces and deletes", async () => {
-    const uploaded = await call("PUT", "/api/configurations/squashtm", asUpload(squashtmFiles()));
+    const uploaded = await call("PUT", "/api/configurations/sample", asUpload(sampleFiles()));
     expect(uploaded.status).toBe(200);
     expect(uploaded.body).toMatchObject({
-      id: "squashtm",
-      name: "SquashTM exploratory testing",
-      hostPorts: [8090, 9501],
+      id: "sample",
+      name: "Sample configuration",
+      hostPorts: [8080, 9501],
       tools: { builtin: "default", mcpServers: [{ name: "memory", type: "http", target: "${MEMORY_URL:-http://host.docker.internal:9501}/mcp" }] },
       checks: ["memory server", "memory agent token"],
     });
-    expect(uploaded.body.files).toContain("files/knowledge/INSTRUCTIONS.md");
+    expect(uploaded.body.files).toContain("files/notes/README.md");
     expect(uploaded.body.files).not.toContain("files/.playwright/cli.config.json");
 
     await call("PUT", "/api/configurations/other", asUpload(minimalFiles()));
     let list = await call("GET", "/api/configurations");
     expect(list.body.builtinSkills).toEqual(["playwright-cli"]);
-    expect(list.body.configurations.map((c: { id: string }) => c.id)).toEqual(["other", "squashtm"]);
+    expect(list.body.configurations.map((c: { id: string }) => c.id)).toEqual(["other", "sample"]);
 
     await call("PUT", "/api/configurations/other", asUpload(minimalFiles({ name: "Replaced" })));
     list = await call("GET", "/api/configurations");
@@ -67,16 +67,16 @@ describe("configurations", () => {
   });
 
   it("serves the content of a configuration file", async () => {
-    await call("PUT", "/api/configurations/squashtm", asUpload(squashtmFiles()));
-    const expected = readFileSync(join(SQUASHTM_DIR, "files/knowledge/INSTRUCTIONS.md"));
-    const file = await call("GET", "/api/configurations/squashtm/files/files/knowledge/INSTRUCTIONS.md");
+    await call("PUT", "/api/configurations/sample", asUpload(sampleFiles()));
+    const expected = readFileSync(join(SAMPLE_DIR, "files/notes/README.md"));
+    const file = await call("GET", "/api/configurations/sample/files/files/notes/README.md");
     expect(file.status).toBe(200);
-    expect(file.body).toEqual({ path: "files/knowledge/INSTRUCTIONS.md", size: expected.length, content: expected.toString("utf8") });
-    expect((await call("GET", "/api/configurations/squashtm/files/config.json")).body.content).toContain("SquashTM");
+    expect(file.body).toEqual({ path: "files/notes/README.md", size: expected.length, content: expected.toString("utf8") });
+    expect((await call("GET", "/api/configurations/sample/files/config.json")).body.content).toContain("Sample configuration");
 
-    expect((await call("GET", "/api/configurations/squashtm/files/nowhere.md")).status).toBe(404);
+    expect((await call("GET", "/api/configurations/sample/files/nowhere.md")).status).toBe(404);
     expect((await call("GET", "/api/configurations/nowhere/files/config.json")).status).toBe(404);
-    expect((await call("GET", "/api/configurations/squashtm/files/files/..%2F..%2Fsquashtm%2Fconfig.json")).status).toBe(400);
+    expect((await call("GET", "/api/configurations/sample/files/files/..%2F..%2Fsample%2Fconfig.json")).status).toBe(400);
 
     await call("PUT", "/api/configurations/binary", asUpload(minimalFiles({}, { "data.bin": "a\0b" })));
     expect((await call("GET", "/api/configurations/binary/files/data.bin")).body).toEqual({ path: "data.bin", size: 3, content: null });
@@ -104,26 +104,26 @@ describe("requests", () => {
 
 describe("session", () => {
   beforeEach(async () => {
-    await call("PUT", "/api/configurations/squashtm", asUpload(squashtmFiles()));
+    await call("PUT", "/api/configurations/sample", asUpload(sampleFiles()));
   });
 
   it("opens the firewall, runs the checks, prepares the workspace and starts Claude Code", async () => {
-    const started = await call("POST", "/api/session", { configuration: "squashtm", cols: 100, rows: 30 });
+    const started = await call("POST", "/api/session", { configuration: "sample", cols: 100, rows: 30 });
     expect(started.status).toBe(200);
-    expect(started.body).toMatchObject({ status: "running", configuration: "squashtm", session: "session_01" });
+    expect(started.body).toMatchObject({ status: "running", configuration: "sample", session: "session_01" });
 
-    expect(fake.calls.firewall).toEqual([{ domains: ["tm-en.doc.squashtest.com", "tm-fr.doc.squashtest.com"], hostPorts: [8090, 9501] }]);
+    expect(fake.calls.firewall).toEqual([{ domains: ["docs.example.com"], hostPorts: [8080, 9501] }]);
     expect(fake.calls.gets).toEqual([
       { url: "http://memory:9501/health", headers: {} },
-      { url: "http://memory:9501/api/stores", headers: { Authorization: "Bearer agent-secret" } },
+      { url: "http://memory:9501/api/stores/sample/list?depth=1&limit=1", headers: { Authorization: "Bearer agent-secret" } },
     ]);
     expect(existsSync(join(settings.workspaceDir, "session_01"))).toBe(true);
-    expect(existsSync(join(settings.workspaceDir, ".claude", "skills", "get-logs", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(settings.workspaceDir, ".claude", "skills", "local-skill", "SKILL.md"))).toBe(true);
     expect(existsSync(join(settings.workspaceDir, ".playwright", "cli.config.json"))).toBe(true);
 
     const [spawned] = fake.calls.spawned;
     expect(spawned).toMatchObject({ cwd: settings.workspaceDir, cols: 100, rows: 30 });
-    expect(spawned!.args[spawned!.args.indexOf("--append-system-prompt") + 1]).toMatch(/^You are in charge to perform some Exploratory Testing/);
+    expect(spawned!.args[spawned!.args.indexOf("--append-system-prompt") + 1]).toBe("You test the sample application.\n");
     expect(spawned!.env).toMatchObject({
       MEMORY_SESSION: "session_01",
       MEMORY_AGENT_TOKEN: "agent-secret",
@@ -137,20 +137,20 @@ describe("session", () => {
     expect(mcp.mcpServers.memory.headers["X-Memory-Session"]).toBe("${MEMORY_SESSION:-}");
 
     // Only one session at a time; its configuration cannot be deleted.
-    expect((await call("POST", "/api/session", { configuration: "squashtm" })).status).toBe(409);
-    expect((await call("DELETE", "/api/configurations/squashtm")).status).toBe(409);
+    expect((await call("POST", "/api/session", { configuration: "sample" })).status).toBe(409);
+    expect((await call("DELETE", "/api/configurations/sample")).status).toBe(409);
 
     // Claude Code exits: the firewall goes back to the base allowlist, the next session gets the next number.
     fake.ptys[0]!.exit(0);
     await settle();
     expect((await call("GET", "/api/session")).body).toMatchObject({ status: "idle", session: "session_01", exitCode: 0 });
     expect(fake.calls.firewall.at(-1)).toEqual({ domains: [], hostPorts: [] });
-    expect((await call("POST", "/api/session", { configuration: "squashtm" })).body.session).toBe("session_02");
+    expect((await call("POST", "/api/session", { configuration: "sample" })).body.session).toBe("session_02");
   });
 
   it("does not start when a check fails, and closes the firewall again", async () => {
     fake.setStatus(401);
-    const started = await call("POST", "/api/session", { configuration: "squashtm" });
+    const started = await call("POST", "/api/session", { configuration: "sample" });
     expect(started.status).toBe(412);
     expect(started.body.error).toContain("check 'memory server' failed");
     expect(fake.calls.spawned).toEqual([]);
@@ -161,7 +161,7 @@ describe("session", () => {
 
   it("stops", async () => {
     expect((await call("DELETE", "/api/session")).status).toBe(409);
-    await call("POST", "/api/session", { configuration: "squashtm" });
+    await call("POST", "/api/session", { configuration: "sample" });
     expect((await call("DELETE", "/api/session")).status).toBe(200);
     expect(fake.ptys[0]!.killed).toBe("SIGHUP");
     await settle();
@@ -175,8 +175,8 @@ describe("session", () => {
 
 describe("terminal", () => {
   it("replays the scrollback, streams the output and forwards input and resizes", async () => {
-    await call("PUT", "/api/configurations/squashtm", asUpload(squashtmFiles()));
-    await call("POST", "/api/session", { configuration: "squashtm" });
+    await call("PUT", "/api/configurations/sample", asUpload(sampleFiles()));
+    await call("POST", "/api/session", { configuration: "sample" });
     fake.ptys[0]!.emit("hello ");
 
     await app.ready();

@@ -1,6 +1,8 @@
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ConfigurationError, relativePath, validateConfiguration } from "../src/configuration.js";
-import { minimalFiles, squashtmFiles } from "./helpers.js";
+import { CONFIGURATIONS_DIR, minimalFiles, readFolder, sampleFiles } from "./helpers.js";
 
 function problems(run: () => unknown): string[] {
   try {
@@ -13,13 +15,21 @@ function problems(run: () => unknown): string[] {
 }
 
 describe("validateConfiguration", () => {
-  it("accepts the squashtm configuration of the repository", () => {
-    const config = validateConfiguration(squashtmFiles(), ["playwright-cli"]);
-    expect(config.domains).toEqual(["tm-en.doc.squashtest.com", "tm-fr.doc.squashtest.com"]);
-    expect(config.hostPorts).toEqual([8090, 9501]);
+  it("accepts the sample configuration", () => {
+    const config = validateConfiguration(sampleFiles(), ["playwright-cli"]);
+    expect(config.domains).toEqual(["docs.example.com"]);
+    expect(config.hostPorts).toEqual([8080, 9501]);
     expect(config.tools.builtin).toBe("default");
     expect(Object.keys(config.tools.mcpServers)).toEqual(["memory"]);
-    expect(config.skills).toEqual(["playwright-cli", "browser-language", "get-logs"]);
+    expect(config.skills).toEqual(["playwright-cli", "local-skill"]);
+  });
+
+  it("accepts every configuration of the repository", () => {
+    const folders = readdirSync(CONFIGURATIONS_DIR, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+    expect(folders.length).toBeGreaterThan(0);
+    for (const folder of folders) {
+      expect(() => validateConfiguration(readFolder(join(CONFIGURATIONS_DIR, folder.name)), ["playwright-cli"]), folder.name).not.toThrow();
+    }
   });
 
   it("applies the defaults", () => {

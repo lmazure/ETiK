@@ -186,8 +186,8 @@ Reload the page to start from the current state again. Links are shareable (`#/s
 
 The test container (`../test_environment/`) uses the store `squashtm`, through the configuration `../test-configurations/squashtm/`:
 
-- `config.json` registers `/mcp` for Claude Code (`tools.mcpServers`), with the agent token, the store and the session taken from the environment (`MEMORY_AGENT_TOKEN`, `MEMORY_STORE`, `MEMORY_SESSION`; `MEMORY_URL` defaults to `http://host.docker.internal:9501`).
-- The container reads the token from `memory.env`. When a session starts, the ETiK console checks that the server answers and accepts the token (`checks`), creates the next `session_##` directory and starts Claude Code with `MEMORY_SESSION` set to its name, so every change is recorded with its Exploratory Test Session.
+- `config.json` registers `/mcp` for Claude Code (`tools.mcpServers`), with the store set in the configuration (`"X-Memory-Store": "squashtm"`), and the agent token and the session taken from the environment (`MEMORY_AGENT_TOKEN`, `MEMORY_SESSION`; `MEMORY_URL` defaults to `http://host.docker.internal:9501`).
+- The container reads the token from `memory.env`. When a session starts, the ETiK console checks that the server answers and that the token reaches the store (`checks`), creates the next `session_##` directory and starts Claude Code with `MEMORY_SESSION` set to its name, so every change is recorded with its Exploratory Test Session.
 - `hostPorts` allows the memory server's host port in the container's firewall.
 - `files/knowledge/INSTRUCTIONS.md` is the policy (documents, entity schema, source tags, capture and consolidation) expressed with the tools. There is no index document: `memory_list` returns each document's description.
 

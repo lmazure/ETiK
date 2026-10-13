@@ -9,7 +9,7 @@ services:
       - NET_ADMIN
       - NET_RAW
     # host.docker.internal maps to the host gateway, so that Claude Code can reach
-    # services published on host ports (SquashTM, the memory server...), only on the
+    # services published on host ports (the application under test, the memory server...), only on the
     # ports allowed by the configuration of the session.
     extra_hosts:
       - "host.docker.internal:host-gateway"

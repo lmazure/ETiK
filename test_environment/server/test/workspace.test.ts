@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ConfigurationStore } from "../src/store.js";
 import { builtinSkills, claudeArguments, expandVariables, nextSessionName, prepareWorkspace } from "../src/workspace.js";
-import { minimalFiles, squashtmFiles, testSettings } from "./helpers.js";
+import { minimalFiles, sampleFiles, testSettings } from "./helpers.js";
 
 let settings: ReturnType<typeof testSettings>;
 let store: ConfigurationStore;
@@ -28,7 +28,7 @@ describe("nextSessionName", () => {
 
 describe("prepareWorkspace", () => {
   it("creates the session directory, installs exactly the selected skills and copies files/", () => {
-    const configuration = store.save("squashtm", squashtmFiles());
+    const configuration = store.save("sample", sampleFiles());
     const skills = join(settings.workspaceDir, ".claude", "skills");
     mkdirSync(join(skills, "stale"), { recursive: true });
     mkdirSync(join(settings.workspaceDir, ".playwright"), { recursive: true });
@@ -40,9 +40,9 @@ describe("prepareWorkspace", () => {
     expect(existsSync(join(skills, "stale"))).toBe(false);
     expect(existsSync(join(skills, "playwright-cli", "SKILL.md"))).toBe(true);
     expect(existsSync(join(skills, "playwright-cli", ".claude"))).toBe(false);
-    expect(existsSync(join(skills, "browser-language", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(skills, "get-logs", "scripts", "get-logs.mjs"))).toBe(true);
-    expect(existsSync(join(settings.workspaceDir, "knowledge", "INSTRUCTIONS.md"))).toBe(true);
+    expect(existsSync(join(skills, "local-skill", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(skills, "local-skill", "scripts", "run.mjs"))).toBe(true);
+    expect(existsSync(join(settings.workspaceDir, "notes", "README.md"))).toBe(true);
     // From the built-in skill playwright-cli, over the file left by a previous session.
     expect(JSON.parse(readFileSync(join(settings.workspaceDir, ".playwright", "cli.config.json"), "utf8")).browser.browserName).toBe("chromium");
     // The system prompt and config.json are not copied into the workspace.

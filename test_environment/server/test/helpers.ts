@@ -6,15 +6,17 @@ import type { Pty, SessionDeps } from "../src/session.js";
 import type { Settings } from "../src/settings.js";
 import { listFiles } from "../src/store.js";
 
-/** The configuration shipped in the repository. */
-export const SQUASHTM_DIR = fileURLToPath(new URL("../../../test-configurations/squashtm", import.meta.url));
+/** A configuration using every feature (fixtures/sample). */
+export const SAMPLE_DIR = fileURLToPath(new URL("./fixtures/sample", import.meta.url));
+/** The configurations shipped in the repository, one folder each. */
+export const CONFIGURATIONS_DIR = fileURLToPath(new URL("../../../test-configurations", import.meta.url));
 
 export function readFolder(dir: string): Map<string, Buffer> {
   return new Map(listFiles(dir).map((path) => [path, readFileSync(join(dir, path))]));
 }
 
-export function squashtmFiles(): Map<string, Buffer> {
-  return readFolder(SQUASHTM_DIR);
+export function sampleFiles(): Map<string, Buffer> {
+  return readFolder(SAMPLE_DIR);
 }
 
 /** A minimal valid configuration, with `config.json` fields overridden. */

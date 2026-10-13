@@ -14,14 +14,14 @@
         "url": "${MEMORY_URL:-http://host.docker.internal:9501}/mcp",
         "headers": {
           "Authorization": "Bearer ${MEMORY_AGENT_TOKEN:-}",
-          "X-Memory-Store": "${MEMORY_STORE:-squashtm}",
+          "X-Memory-Store": "squashtm",
           "X-Memory-Session": "${MEMORY_SESSION:-}"
         }
       }
     }
   },
   "skills": ["playwright-cli", "browser-language", "get-logs"],
-  "env": ["MEMORY_URL", "MEMORY_AGENT_TOKEN", "MEMORY_STORE"],
+  "env": ["MEMORY_URL", "MEMORY_AGENT_TOKEN"],
   "checks": [
     {
       "name": "memory server",
@@ -29,7 +29,7 @@
     },
     {
       "name": "memory agent token",
-      "url": "${MEMORY_URL:-http://host.docker.internal:9501}/api/stores",
+      "url": "${MEMORY_URL:-http://host.docker.internal:9501}/api/stores/squashtm/list?depth=1&limit=1",
       "headers": { "Authorization": "Bearer ${MEMORY_AGENT_TOKEN}" }
     }
   ]

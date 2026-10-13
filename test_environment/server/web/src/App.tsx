@@ -69,7 +69,7 @@ export function App() {
 
         <section>
           <h2>Configurations</h2>
-          {configurations.length === 0 && <p class="muted">No configuration yet: upload a configuration folder (e.g. <code>test_environment/configurations/squashtm</code>).</p>}
+          {configurations.length === 0 && <p class="muted">No configuration yet: upload a configuration folder (e.g. one in <code>test-configurations/</code>).</p>}
           <ul class="configurations">
             {configurations.map((c) => (
               <li key={c.id} class={c.id === selected ? "selected" : ""}>
