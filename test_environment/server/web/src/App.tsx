@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import {
   type ConfigurationEntry, type ConfigurationFile, type ConfigurationSummary, deleteConfiguration, listConfigurations,
-  readConfigurationFile, type SessionState, startSession, stopSession, uploadConfiguration,
+  readConfigurationFile, type RunState, startRun, stopRun, uploadConfiguration,
 } from "./api.js";
 import { Terminal, type TerminalHandle } from "./Terminal.js";
 
@@ -11,7 +11,7 @@ export function App() {
   const [configurations, setConfigurations] = useState<ConfigurationEntry[]>([]);
   const [builtinSkills, setBuiltinSkills] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | undefined>(undefined);
-  const [state, setState] = useState<SessionState>({ status: "idle" });
+  const [state, setState] = useState<RunState>({ status: "idle" });
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -34,7 +34,7 @@ export function App() {
 
   useEffect(() => void refresh(), [refresh]);
 
-  const onState = useCallback((next: SessionState) => {
+  const onState = useCallback((next: RunState) => {
     setState(next);
     if (next.configuration && next.status !== "idle") setSelected(next.configuration);
   }, []);
@@ -97,10 +97,9 @@ export function App() {
         {current && <Details configuration={current} builtinSkills={builtinSkills} />}
 
         <section>
-          <h2>Session</h2>
+          <h2>Claude Code</h2>
           <p>
             <span class={`status ${state.status}`}>{state.status}</span>
-            {state.session && <> <code>{state.session}</code></>}
             {state.configuration && <span class="muted"> ({state.configuration})</span>}
             {!connected && <span class="muted"> — terminal disconnected</span>}
           </p>
@@ -108,12 +107,12 @@ export function App() {
             <button class="primary" disabled={busy || !current || !isSummary(current)}
               onClick={() => void act(async () => {
                 const { cols, rows } = terminal.current?.size() ?? { cols: 120, rows: 40 };
-                await startSession(selected!, cols, rows);
+                await startRun(selected!, cols, rows);
                 terminal.current?.focus();
-              })}>Start a session</button>
+              })}>Start Claude Code</button>
           ) : (
             <button class="danger" disabled={busy || state.status !== "running"}
-              onClick={() => confirm("Stop Claude Code?") && void act(stopSession)}>Stop the session</button>
+              onClick={() => confirm("Stop Claude Code?") && void act(stopRun)}>Stop Claude Code</button>
           )}
           {state.status === "idle" && state.exitCode !== undefined && <p class="muted small">Claude Code exited with code {state.exitCode}.</p>}
           {error && <pre class="error">{error}</pre>}

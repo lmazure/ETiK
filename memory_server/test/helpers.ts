@@ -29,7 +29,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
 export function testCore(maxDocumentBytes = 10_000) {
   const db = openDatabase(":memory:");
   const core = new MemoryCore(db, { maxDocumentBytes });
-  const ctx: Context = { store: "squashtm", actor: "agent:squashtm", session: "session_01" };
+  const ctx: Context = { store: "squashtm", actor: "agent:squashtm" };
   return {
     db,
     core,

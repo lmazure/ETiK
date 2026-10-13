@@ -64,6 +64,10 @@ const MIGRATIONS: string[] = [
   CREATE INDEX changesets_by_store ON changesets(store, id);
   CREATE INDEX versions_by_changeset ON versions(changeset_id);
   `,
+  // 3: no session in the history
+  `
+  ALTER TABLE changesets DROP COLUMN session;
+  `,
 ];
 
 export function openDatabase(file: string): DB {

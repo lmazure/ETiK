@@ -25,7 +25,7 @@ async function connect(headers: Record<string, string>): Promise<Client> {
   return client;
 }
 
-const agentHeaders = { Authorization: `Bearer ${AGENT_TOKEN}`, "X-Memory-Store": "squashtm", "X-Memory-Session": "session_07" };
+const agentHeaders = { Authorization: `Bearer ${AGENT_TOKEN}`, "X-Memory-Store": "squashtm" };
 
 type TextResult = { content: { type: string; text: string }[]; isError?: boolean };
 
@@ -97,11 +97,11 @@ describe("MCP server", () => {
     await client.close();
   });
 
-  it("records the session header in the history", async () => {
+  it("records the actor and change note in the history", async () => {
     const client = await connect(agentHeaders);
     await call(client, "memory_write", { path: "/h.md", file_text: "x\n", change_note: "first" });
     const history = await call(client, "memory_history", { path: "/h.md" });
-    expect(history.content[0]!.text).toMatch(/^History of \/h\.md: 1 version, current 1 \(newest first\)\nv1 · .* · create · session session_07 · agent:squashtm · 2 B · "first"$/);
+    expect(history.content[0]!.text).toMatch(/^History of \/h\.md: 1 version, current 1 \(newest first\)\nv1 · .* · create · agent:squashtm · 2 B · "first"$/);
     await client.close();
   });
 

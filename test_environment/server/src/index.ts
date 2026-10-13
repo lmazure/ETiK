@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { spawn } from "node-pty";
 import { buildApp } from "./app.js";
-import { SessionManager } from "./session.js";
+import { RunManager } from "./run.js";
 import { loadSettings } from "./settings.js";
 import { ConfigurationStore } from "./store.js";
 import { builtinSkills, type Owner } from "./workspace.js";
@@ -22,7 +22,7 @@ if (isRoot) {
 
 const skills = () => builtinSkills(settings.builtinDir);
 const store = new ConfigurationStore(settings.stateDir);
-const sessions = new SessionManager(settings, store, {
+const runs = new RunManager(settings, store, {
   spawnClaude: (args, options) => {
     const [file, fileArgs] = isRoot
       ? ["setpriv", ["--reuid", settings.agentUser, "--regid", settings.agentUser, "--init-groups", "--", settings.claudeCommand, ...args]]
@@ -50,11 +50,11 @@ const sessions = new SessionManager(settings, store, {
   env: process.env,
 });
 
-const app = buildApp(store, sessions, skills, settings.webRoot, { logger: { level: process.env.LOG_LEVEL ?? "info" } });
+const app = buildApp(store, runs, skills, settings.webRoot, { logger: { level: process.env.LOG_LEVEL ?? "info" } });
 
 const shutdown = async (signal: string) => {
   app.log.info(`${signal} received, shutting down`);
-  await sessions.close();
+  await runs.close();
   await app.close();
   process.exit(0);
 };

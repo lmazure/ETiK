@@ -30,10 +30,9 @@ export interface BrokenConfiguration {
 
 export type ConfigurationEntry = ConfigurationSummary | BrokenConfiguration;
 
-export interface SessionState {
+export interface RunState {
   status: "idle" | "starting" | "running" | "stopping";
   configuration?: string;
-  session?: string;
   startedAt?: string;
   error?: string;
   exitCode?: number;
@@ -63,10 +62,10 @@ export const readConfigurationFile = (id: string, path: string) =>
 
 export const deleteConfiguration = (id: string) => call<void>("DELETE", `/api/configurations/${encodeURIComponent(id)}`);
 
-export const startSession = (configuration: string, cols: number, rows: number) =>
-  call<SessionState>("POST", "/api/session", { configuration, cols, rows });
+export const startRun = (configuration: string, cols: number, rows: number) =>
+  call<RunState>("POST", "/api/run", { configuration, cols, rows });
 
-export const stopSession = () => call<SessionState>("DELETE", "/api/session");
+export const stopRun = () => call<RunState>("DELETE", "/api/run");
 
 function base64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);

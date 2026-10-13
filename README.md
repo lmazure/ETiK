@@ -27,11 +27,11 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
   - You chat with Claude Code from your browser, in the web terminal of the ETiK console (`http://localhost:7681`).
   - A configuration (`test-configurations/squashtm/`) defines the system prompt, the allowed Internet domains and host ports, the tools and the skills; you upload it from the console.
   - Claude Code drives SquashTM's UI with Playwright CLI, following the Exploratory Testing process in its system prompt (`test-configurations/squashtm/system-prompt.md`).
-  - Each Exploratory Test Session writes its charter, checklist, replay log, bug reports and screenshots into a `test_environment/workspace/session_##/` directory.
-  - A firewall only lets the container reach the Anthropic API, and, while a session runs, the domains and host ports of its configuration: the SquashTM documentation, and, on the host, SquashTM and the memory server.
+  - For each Exploratory Test Session, the agent creates a `test_environment/workspace/session_##/` directory, where it writes the charter, checklist, replay log, bug reports and screenshots.
+  - A firewall only lets the container reach the Anthropic API, and, while Claude Code runs, the domains and host ports of its configuration: the SquashTM documentation, and, on the host, SquashTM and the memory server.
 - **The memory server** (`memory_server/`) is the agent's durable knowledge about the SUT across Sessions: UI pages, private API endpoints, business rules.
   - It is a separate container, so the agent cannot tamper with its files.
-  - It keeps every version of every document and records which Session made each change.
+  - It keeps every version of every document and the change note of each change; the agent starts each change note with its Session.
   - The agent reaches it through MCP (`memory_*` tools), with a token limited to its own store.
   - You watch it live in a read-only web app.
 
@@ -72,9 +72,9 @@ See `memory_server/README.md` for the server and the web app, and `memory_server
    ```
    Only `test_environment/workspace/` is mounted in the container, which keeps the memory server's admin token out of the agent's reach.
 3. Open `http://localhost:7681` (the ETiK console), click **Upload configuration folder…** and pick `test-configurations/squashtm`.
-4. Select the configuration and click **Start a session**.
-   - The console opens the firewall to the configuration's domains and host ports, checks the memory server and the token, creates the next `workspace/session_##` directory, then starts Claude Code in the web terminal.
+4. Select the configuration and click **Start Claude Code**.
+   - The console opens the firewall to the configuration's domains and host ports, checks the memory server and the token, then starts Claude Code in the web terminal.
    - The first time, log in with your Claude subscription and accept the prompts; the login is kept in a Docker volume.
-5. Give Claude Code an Exploratory Test Charter (or let it ask you for one), and follow the Session: it proposes a charter, builds a checklist, tests, writes bug reports into `workspace/session_##/`, and records what it learns about SquashTM in the memory server.
+5. Give Claude Code an Exploratory Test Charter (or let it ask you for one), and follow the Session: it creates the next `workspace/session_##/` directory, proposes a charter, builds a checklist, tests, writes bug reports into `workspace/session_##/`, and records what it learns about SquashTM in the memory server.
 
 See `test_environment/README.md` for more details.

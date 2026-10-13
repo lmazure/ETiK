@@ -5,7 +5,7 @@ import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from "fastify";
 import { z } from "zod";
 import { ConfigurationError, MAX_TOTAL_BYTES, relativePath } from "./configuration.js";
-import { SessionError, type SessionManager } from "./session.js";
+import { RunError, type RunManager } from "./run.js";
 import type { Configuration, ConfigurationStore } from "./store.js";
 
 /** The console is only meant for a browser on the Docker host, through the port published on 127.0.0.1. */
@@ -69,7 +69,7 @@ function text(content: Buffer): string | null {
 
 function errorHandler(error: FastifyError | Error, _request: FastifyRequest, reply: FastifyReply) {
   if (error instanceof ConfigurationError) return reply.code(error.statusCode).send({ error: error.message, problems: error.problems });
-  if (error instanceof SessionError) return reply.code(error.statusCode).send({ error: error.message });
+  if (error instanceof RunError) return reply.code(error.statusCode).send({ error: error.message });
   if (error instanceof z.ZodError) {
     return reply.code(400).send({ error: error.issues.map((issue) => `${issue.path.join(".") || "(body)"}: ${issue.message}`).join("\n") });
   }
@@ -80,7 +80,7 @@ function errorHandler(error: FastifyError | Error, _request: FastifyRequest, rep
 
 export function buildApp(
   store: ConfigurationStore,
-  sessions: SessionManager,
+  runs: RunManager,
   builtinSkills: () => string[],
   webRoot: string | undefined,
   options: FastifyServerOptions = {},
@@ -125,24 +125,24 @@ export function buildApp(
   });
 
   app.delete<{ Params: { id: string } }>("/api/configurations/:id", async (request, reply) => {
-    const state = sessions.getState();
+    const state = runs.getState();
     if (state.status !== "idle" && state.configuration === request.params.id) {
-      throw new SessionError(409, "this configuration is used by the current session");
+      throw new RunError(409, "this configuration is used by the running Claude Code");
     }
     store.delete(request.params.id);
     return reply.code(204).send();
   });
 
-  app.get("/api/session", async () => sessions.getState());
+  app.get("/api/run", async () => runs.getState());
 
-  app.post("/api/session", async (request) => {
+  app.post("/api/run", async (request) => {
     const body = startBody.parse(request.body);
-    return sessions.start(body.configuration, body.cols, body.rows);
+    return runs.start(body.configuration, body.cols, body.rows);
   });
 
-  app.delete("/api/session", async () => {
-    sessions.stop();
-    return sessions.getState();
+  app.delete("/api/run", async () => {
+    runs.stop();
+    return runs.getState();
   });
 
   app.register(fastifyWebsocket);
@@ -152,12 +152,12 @@ export function buildApp(
       const send = (message: object) => {
         if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
       };
-      send({ type: "state", state: sessions.getState() });
-      const scrollback = sessions.getScrollback();
+      send({ type: "state", state: runs.getState() });
+      const scrollback = runs.getScrollback();
       if (scrollback) send({ type: "output", data: scrollback });
       const unsubscribe = [
-        sessions.onState((state) => send({ type: "state", state })),
-        sessions.onOutput((data) => send({ type: "output", data })),
+        runs.onState((state) => send({ type: "state", state })),
+        runs.onOutput((data) => send({ type: "output", data })),
       ];
       socket.on("message", (raw: Buffer) => {
         let message: z.infer<typeof clientMessage>;
@@ -166,8 +166,8 @@ export function buildApp(
         } catch {
           return;
         }
-        if (message.type === "input") sessions.write(message.data);
-        else sessions.resize(message.cols, message.rows);
+        if (message.type === "input") runs.write(message.data);
+        else runs.resize(message.cols, message.rows);
       });
       socket.on("close", () => unsubscribe.forEach((stop) => stop()));
     });

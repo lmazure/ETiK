@@ -2,9 +2,9 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Settings } from "./settings.js";
 import type { ConfigurationStore } from "./store.js";
-import { claudeArguments, expandVariables, nextSessionName, type Owner, prepareWorkspace } from "./workspace.js";
+import { claudeArguments, expandVariables, type Owner, prepareWorkspace } from "./workspace.js";
 
-/** The subset of node-pty's IPty the session uses. */
+/** The subset of node-pty's IPty the run uses. */
 export interface Pty {
   onData(listener: (data: string) => void): unknown;
   onExit(listener: (event: { exitCode: number; signal?: number }) => void): unknown;
@@ -13,7 +13,7 @@ export interface Pty {
   kill(signal?: string): void;
 }
 
-export interface SessionDeps {
+export interface RunDeps {
   /** Starts `claude` with these arguments and environment, as the agent user, in a pseudo-terminal. */
   spawnClaude(args: string[], options: { cwd: string; env: Record<string, string>; cols: number; rows: number }): Pty;
   /** Runs init-firewall.sh with these domains and host ports (none: the base allowlist); returns its output. */
@@ -28,14 +28,12 @@ export interface SessionDeps {
   env: NodeJS.ProcessEnv;
 }
 
-export type SessionStatus = "idle" | "starting" | "running" | "stopping";
+export type RunStatus = "idle" | "starting" | "running" | "stopping";
 
-export interface SessionState {
-  status: SessionStatus;
-  /** Configuration of the current, or else the last, session. */
+export interface RunState {
+  status: RunStatus;
+  /** Configuration of the current, or else the last, run. */
   configuration?: string;
-  /** Name of the current, or else the last, session directory. */
-  session?: string;
   startedAt?: string;
   /** Why the last start failed. */
   error?: string;
@@ -43,7 +41,7 @@ export interface SessionState {
   exitCode?: number;
 }
 
-export class SessionError extends Error {
+export class RunError extends Error {
   constructor(readonly statusCode: number, message: string) {
     super(message);
   }
@@ -52,22 +50,22 @@ export class SessionError extends Error {
 /** Terminal output kept for the browsers that (re)connect. */
 const SCROLLBACK_CHARS = 1024 * 1024;
 
-/** One session at a time: Claude Code in a pseudo-terminal, behind the firewall of its configuration. */
-export class SessionManager {
-  private state: SessionState = { status: "idle" };
+/** One run at a time: Claude Code in a pseudo-terminal, behind the firewall of its configuration. */
+export class RunManager {
+  private state: RunState = { status: "idle" };
   private pty: Pty | undefined;
   private scrollback: string[] = [];
   private scrollbackChars = 0;
   private readonly outputListeners = new Set<(data: string) => void>();
-  private readonly stateListeners = new Set<(state: SessionState) => void>();
+  private readonly stateListeners = new Set<(state: RunState) => void>();
 
   constructor(
     private readonly settings: Settings,
     private readonly store: ConfigurationStore,
-    private readonly deps: SessionDeps,
+    private readonly deps: RunDeps,
   ) {}
 
-  getState(): SessionState {
+  getState(): RunState {
     return { ...this.state };
   }
 
@@ -80,14 +78,14 @@ export class SessionManager {
     return () => this.outputListeners.delete(listener);
   }
 
-  onState(listener: (state: SessionState) => void): () => void {
+  onState(listener: (state: RunState) => void): () => void {
     this.stateListeners.add(listener);
     return () => this.stateListeners.delete(listener);
   }
 
-  /** Starts a session; the progress is written to the terminal. Rejects with a SessionError if it cannot start. */
-  async start(configurationId: string, cols = 120, rows = 40): Promise<SessionState> {
-    if (this.state.status !== "idle") throw new SessionError(409, `a session is already ${this.state.status}`);
+  /** Starts Claude Code; the progress is written to the terminal. Rejects with a RunError if it cannot start. */
+  async start(configurationId: string, cols = 120, rows = 40): Promise<RunState> {
+    if (this.state.status !== "idle") throw new RunError(409, `Claude Code is already ${this.state.status}`);
     const configuration = this.store.get(configurationId);
     const { config } = configuration;
     this.scrollback = [];
@@ -113,13 +111,12 @@ export class SessionManager {
           status = (error as Error).message;
         }
         if (typeof status !== "number" || status < 200 || status >= 300) {
-          throw new SessionError(412, `check '${check.name}' failed: GET ${url} -> ${status}`);
+          throw new RunError(412, `check '${check.name}' failed: GET ${url} -> ${status}`);
         }
         this.print(`OK: ${check.name}`);
       }
 
-      const session = nextSessionName(this.settings.workspaceDir);
-      prepareWorkspace(this.settings.workspaceDir, configuration, this.settings.builtinDir, session, this.deps.owner);
+      prepareWorkspace(this.settings.workspaceDir, configuration, this.settings.builtinDir, this.deps.owner);
       mkdirSync(this.settings.runDir, { recursive: true, mode: 0o755 });
       const mcpConfigFile = join(this.settings.runDir, "mcp.json");
       writeFileSync(mcpConfigFile, JSON.stringify({ mcpServers: config.tools.mcpServers }, null, 2), { mode: 0o644 });
@@ -135,8 +132,6 @@ export class SessionManager {
         COLORTERM: "truecolor",
         CLAUDE_CONFIG_DIR: join(this.settings.agentHome, ".claude"),
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
-        // The session name; the name comes from the memory server, which records it with each change.
-        MEMORY_SESSION: session,
       };
       if (this.deps.env.PLAYWRIGHT_BROWSERS_PATH) env.PLAYWRIGHT_BROWSERS_PATH = this.deps.env.PLAYWRIGHT_BROWSERS_PATH;
       for (const name of config.env) {
@@ -144,27 +139,27 @@ export class SessionManager {
         if (value !== undefined) env[name] = value;
       }
 
-      this.print(`\x1b[1m== Session ${session}\x1b[0m\r\n`);
+      this.print(`\x1b[1m== Claude Code\x1b[0m\r\n`);
       const pty = this.deps.spawnClaude(claudeArguments(configuration, systemPrompt, mcpConfigFile), {
         cwd: this.settings.workspaceDir, env, cols, rows,
       });
       this.pty = pty;
       pty.onData((data) => this.output(data));
       pty.onExit(({ exitCode }) => void this.ended(pty, exitCode));
-      this.setState({ status: "running", configuration: configuration.id, session, startedAt: new Date().toISOString() });
+      this.setState({ status: "running", configuration: configuration.id, startedAt: new Date().toISOString() });
       return this.getState();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.print(`\x1b[31mERROR: ${message}\x1b[0m`);
       if (firewallOpened) await this.resetFirewall();
       this.setState({ status: "idle", configuration: configuration.id, error: message });
-      throw error instanceof SessionError ? error : new SessionError(500, message);
+      throw error instanceof RunError ? error : new RunError(500, message);
     }
   }
 
-  /** Stops the running session: Claude Code is killed, the end is handled like a normal exit. */
+  /** Stops Claude Code: it is killed, the end is handled like a normal exit. */
   stop(): void {
-    if (this.state.status !== "running" || !this.pty) throw new SessionError(409, "no session is running");
+    if (this.state.status !== "running" || !this.pty) throw new RunError(409, "Claude Code is not running");
     this.setState({ ...this.state, status: "stopping" });
     this.pty.kill("SIGHUP");
   }
@@ -208,7 +203,7 @@ export class SessionManager {
     }
   }
 
-  private setState(state: SessionState): void {
+  private setState(state: RunState): void {
     this.state = state;
     for (const listener of this.stateListeners) listener(this.getState());
   }

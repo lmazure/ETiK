@@ -1,7 +1,7 @@
 # Test container
 
 A Docker container that runs Claude Code in YOLO mode (`--dangerously-skip-permissions`) behind an egress firewall, with Playwright CLI (Chromium and its skill).
-It includes the **ETiK console**, a small web server: from a browser on the host, you upload a configuration, start a session with it, and chat with Claude Code in a web terminal.
+It includes the **ETiK console**, a small web server: from a browser on the host, you upload a configuration, start Claude Code with it, and chat with Claude Code in a web terminal.
 
 ## Prerequisites
 
@@ -18,21 +18,20 @@ Copy `memory.env.example` to `memory.env` and set `MEMORY_AGENT_TOKEN` to that a
    At start, the firewall only lets the container reach the Anthropic API and claude.ai (`docker logs etik` shows it).
 2. Open `http://localhost:7681` (another port: set `ETIK_PORT`, e.g. `ETIK_PORT=7700 docker compose up -d`).
 3. Click **Upload configuration folder…** and pick a configuration folder, e.g. one in `../test-configurations/`. The configuration is named after the folder; uploading a folder with the same name replaces it. The uploaded configurations are kept in the `etik-state` volume. The details of the selected configuration list its files: click a file name (or the system prompt) to view its content.
-4. Select the configuration and click **Start a session**. The console:
+4. Select the configuration and click **Start Claude Code**. The console:
    - opens the firewall to the configuration's Internet domains and host ports;
    - runs its checks (e.g. the memory server answers and the token reaches the configuration's store);
-   - creates the next `workspace/session_##/` directory;
    - installs the built-in skills and the configuration's skills in `workspace/.claude/skills/` and copies its `files/` into `workspace/`;
-   - starts Claude Code in `workspace/` with the system prompt, the built-in tools and the MCP servers of the configuration, and `MEMORY_SESSION` set to the session name.
+   - starts Claude Code in `workspace/` with the system prompt, the built-in tools, the MCP servers and the environment variables of the configuration.
 
    Its progress, then Claude Code, appear in the terminal.
 5. The first time, log in with your Claude subscription (`/login` or the first-run screens) and accept the prompts. The login and settings are kept in the `claude-config` volume.
-6. Give Claude Code an Exploratory Test Charter (or let it ask you for one), and follow the Session.
-7. **Stop the session** (or `/exit` in Claude Code) ends it. The processes of Claude Code (including the browser) are killed, and the firewall goes back to the base allowlist.
+6. Work with Claude Code as the configuration's system prompt says (e.g. for `squashtm`, give it an Exploratory Test Charter).
+7. **Stop Claude Code** (or `/exit` in Claude Code) ends the run. The processes of Claude Code (including the browser) are killed, and the firewall goes back to the base allowlist.
 
-Reloading the page reattaches to the running session. Only one session runs at a time.
+Reloading the page reattaches to the running Claude Code. Only one Claude Code runs at a time.
 
-The sessions are written into `workspace/` on the host (gitignored): `workspace/session_##/` holds the charter, checklist, log, bug reports and screenshots. Session directories from the former dev container can be moved there to keep the numbering.
+What Claude Code writes stays in `workspace/` on the host (gitignored), from one run to the next. How it is organized is up to the configuration's system prompt.
 
 To watch the memory while the agent works, open `http://localhost:9501/` on the host and log in with the viewer token (`MEMORY_VIEWER_TOKEN` in `../memory_server/.env`).
 
@@ -45,7 +44,7 @@ A configuration is a folder:
   config.json         see below
   system-prompt.md    appended to Claude Code's system prompt (--append-system-prompt)
   skills/<name>/      skills, each with its SKILL.md
-  files/              copied into the workspace at each session start
+  files/              copied into the workspace each time Claude Code starts
 ```
 
 `config.json`:
@@ -59,18 +58,18 @@ A configuration is a folder:
 | `tools.builtin` | Claude Code built-in tools (`claude --tools`): `"default"` for all of them, or a list of names such as `["Bash", "Read", "Edit"]`. |
 | `tools.mcpServers` | MCP servers, in the `mcpServers` format of `.mcp.json` (`${VAR}` and `${VAR:-default}` are expanded by Claude Code). Only these are loaded (`--strict-mcp-config`). |
 | `env` | Variables of the container (e.g. from `memory.env`) passed on to Claude Code. |
-| `checks` | `{name, url, headers}`: HTTP GETs that must answer 2xx before the session starts (`${VAR}` expanded from the container environment). |
+| `checks` | `{name, url, headers}`: HTTP GETs that must answer 2xx before Claude Code starts (`${VAR}` expanded from the container environment). |
 
-Skills are not listed in `config.json`: every folder `skills/<name>/` of the configuration is installed, and must hold a `SKILL.md`. The skills built into the image (`playwright-cli`) are installed in every session too; a configuration skill of the same name replaces a built-in one. A built-in skill also brings the files its installer wrote: `playwright-cli` comes with `.playwright/cli.config.json` (Chromium), which `files/` can override.
+Skills are not listed in `config.json`: every folder `skills/<name>/` of the configuration is installed, and must hold a `SKILL.md`. The skills built into the image (`playwright-cli`) are installed in every run too; a configuration skill of the same name replaces a built-in one. A built-in skill also brings the files its installer wrote: `playwright-cli` comes with `.playwright/cli.config.json` (Chromium), which `files/` can override.
 
 The memory store is a parameter of the configuration: the `X-Memory-Store` header of its memory MCP server, e.g. `"X-Memory-Store": "my-store"`, and a check on `${MEMORY_URL:-http://host.docker.internal:9501}/api/stores/my-store/list?depth=1&limit=1` with the agent token, which fails if the token cannot reach the store.
 
-To allow another Web site or host port, edit `config.json`, upload the folder again and start a new session.
+To allow another Web site or host port, edit `config.json`, upload the folder again and start Claude Code again.
 
 ## Security
 
-- The firewall (`init-firewall.sh`) denies all outbound traffic except DNS, the base domains, and the domains and host ports of the running session's configuration. Domains are resolved when the firewall is applied (at container start and at each session start and end).
-- Claude Code runs as the user `node`; the console runs as root, because it programs the firewall. The `node` user cannot connect to the console's port, so Claude Code cannot upload a looser configuration or start a session itself. It cannot read the uploaded configurations either.
+- The firewall (`init-firewall.sh`) denies all outbound traffic except DNS, the base domains, and the domains and host ports of the configuration of the running Claude Code. Domains are resolved when the firewall is applied (at container start, and each time Claude Code starts and ends).
+- Claude Code runs as the user `node`; the console runs as root, because it programs the firewall. The `node` user cannot connect to the console's port, so Claude Code cannot upload a looser configuration or start another Claude Code itself. It cannot read the uploaded configurations either.
 - The console's port is published on `127.0.0.1` only, and the console refuses requests whose `Host` or `Origin` is not local.
 
 ## Development

@@ -14,8 +14,7 @@
         "url": "${MEMORY_URL:-http://host.docker.internal:9501}/mcp",
         "headers": {
           "Authorization": "Bearer ${MEMORY_AGENT_TOKEN:-}",
-          "X-Memory-Store": "squashtm",
-          "X-Memory-Session": "${MEMORY_SESSION:-}"
+          "X-Memory-Store": "squashtm"
         }
       }
     }

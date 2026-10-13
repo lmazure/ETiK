@@ -1,15 +1,15 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { SessionManager } from "../src/session.js";
+import { RunManager } from "../src/run.js";
 import { ConfigurationStore } from "../src/store.js";
 import { fakeDeps, minimalFiles, SAMPLE_DIR, sampleFiles, settle, testSettings } from "./helpers.js";
 
 let settings: ReturnType<typeof testSettings>;
 let fake: ReturnType<typeof fakeDeps>;
-let sessions: SessionManager;
+let runs: RunManager;
 let app: FastifyInstance;
 
 const ENV = { MEMORY_AGENT_TOKEN: "agent-secret", MEMORY_URL: "http://memory:9501", SECRET: "not passed on" };
@@ -18,8 +18,8 @@ beforeEach(() => {
   settings = testSettings();
   const store = new ConfigurationStore(settings.stateDir);
   fake = fakeDeps(ENV);
-  sessions = new SessionManager(settings, store, fake.deps);
-  app = buildApp(store, sessions, () => ["playwright-cli"], undefined);
+  runs = new RunManager(settings, store, fake.deps);
+  app = buildApp(store, runs, () => ["playwright-cli"], undefined);
 });
 
 afterEach(async () => {
@@ -95,29 +95,29 @@ describe("configurations", () => {
 
 describe("requests", () => {
   it("are accepted only from a local host name and same-origin pages", async () => {
-    expect((await call("GET", "/api/session", undefined, { host: "127.0.0.1:7681" })).status).toBe(200);
-    expect((await call("GET", "/api/session", undefined, { host: "evil.example.com:7681" })).status).toBe(403);
-    expect((await call("GET", "/api/session", undefined, { host: "localhost:7681", origin: "http://evil.example.com" })).status).toBe(403);
-    expect((await call("GET", "/api/session", undefined, { host: "localhost:7681", origin: "http://localhost:7681" })).status).toBe(200);
+    expect((await call("GET", "/api/run", undefined, { host: "127.0.0.1:7681" })).status).toBe(200);
+    expect((await call("GET", "/api/run", undefined, { host: "evil.example.com:7681" })).status).toBe(403);
+    expect((await call("GET", "/api/run", undefined, { host: "localhost:7681", origin: "http://evil.example.com" })).status).toBe(403);
+    expect((await call("GET", "/api/run", undefined, { host: "localhost:7681", origin: "http://localhost:7681" })).status).toBe(200);
   });
 });
 
-describe("session", () => {
+describe("run", () => {
   beforeEach(async () => {
     await call("PUT", "/api/configurations/sample", asUpload(sampleFiles()));
   });
 
   it("opens the firewall, runs the checks, prepares the workspace and starts Claude Code", async () => {
-    const started = await call("POST", "/api/session", { configuration: "sample", cols: 100, rows: 30 });
+    const started = await call("POST", "/api/run", { configuration: "sample", cols: 100, rows: 30 });
     expect(started.status).toBe(200);
-    expect(started.body).toMatchObject({ status: "running", configuration: "sample", session: "session_01" });
+    expect(started.body).toMatchObject({ status: "running", configuration: "sample" });
 
     expect(fake.calls.firewall).toEqual([{ domains: ["docs.example.com"], hostPorts: [8080, 9501] }]);
     expect(fake.calls.gets).toEqual([
       { url: "http://memory:9501/health", headers: {} },
       { url: "http://memory:9501/api/stores/sample/list?depth=1&limit=1", headers: { Authorization: "Bearer agent-secret" } },
     ]);
-    expect(existsSync(join(settings.workspaceDir, "session_01"))).toBe(true);
+    expect(readdirSync(settings.workspaceDir).sort()).toEqual([".claude", ".playwright", "notes"]);
     expect(existsSync(join(settings.workspaceDir, ".claude", "skills", "local-skill", "SKILL.md"))).toBe(true);
     expect(existsSync(join(settings.workspaceDir, ".playwright", "cli.config.json"))).toBe(true);
 
@@ -125,7 +125,6 @@ describe("session", () => {
     expect(spawned).toMatchObject({ cwd: settings.workspaceDir, cols: 100, rows: 30 });
     expect(spawned!.args[spawned!.args.indexOf("--append-system-prompt") + 1]).toBe("You test the sample application.\n");
     expect(spawned!.env).toMatchObject({
-      MEMORY_SESSION: "session_01",
       MEMORY_AGENT_TOKEN: "agent-secret",
       MEMORY_URL: "http://memory:9501",
       HOME: "/home/node",
@@ -134,49 +133,49 @@ describe("session", () => {
     });
     expect(spawned!.env.SECRET).toBeUndefined();
     const mcp = JSON.parse(readFileSync(join(settings.runDir, "mcp.json"), "utf8"));
-    expect(mcp.mcpServers.memory.headers["X-Memory-Session"]).toBe("${MEMORY_SESSION:-}");
+    expect(mcp.mcpServers.memory.headers["X-Memory-Store"]).toBe("sample");
 
-    // Only one session at a time; its configuration cannot be deleted.
-    expect((await call("POST", "/api/session", { configuration: "sample" })).status).toBe(409);
+    // Only one run at a time; its configuration cannot be deleted.
+    expect((await call("POST", "/api/run", { configuration: "sample" })).status).toBe(409);
     expect((await call("DELETE", "/api/configurations/sample")).status).toBe(409);
 
-    // Claude Code exits: the firewall goes back to the base allowlist, the next session gets the next number.
+    // Claude Code exits: the firewall goes back to the base allowlist; it can start again.
     fake.ptys[0]!.exit(0);
     await settle();
-    expect((await call("GET", "/api/session")).body).toMatchObject({ status: "idle", session: "session_01", exitCode: 0 });
+    expect((await call("GET", "/api/run")).body).toMatchObject({ status: "idle", configuration: "sample", exitCode: 0 });
     expect(fake.calls.firewall.at(-1)).toEqual({ domains: [], hostPorts: [] });
-    expect((await call("POST", "/api/session", { configuration: "sample" })).body.session).toBe("session_02");
+    expect((await call("POST", "/api/run", { configuration: "sample" })).body.status).toBe("running");
   });
 
   it("does not start when a check fails, and closes the firewall again", async () => {
     fake.setStatus(401);
-    const started = await call("POST", "/api/session", { configuration: "sample" });
+    const started = await call("POST", "/api/run", { configuration: "sample" });
     expect(started.status).toBe(412);
     expect(started.body.error).toContain("check 'memory server' failed");
     expect(fake.calls.spawned).toEqual([]);
     expect(fake.calls.firewall.at(-1)).toEqual({ domains: [], hostPorts: [] });
-    expect(existsSync(join(settings.workspaceDir, "session_01"))).toBe(false);
-    expect((await call("GET", "/api/session")).body).toMatchObject({ status: "idle", error: expect.stringContaining("memory server") });
+    expect(existsSync(settings.workspaceDir)).toBe(false);
+    expect((await call("GET", "/api/run")).body).toMatchObject({ status: "idle", error: expect.stringContaining("memory server") });
   });
 
   it("stops", async () => {
-    expect((await call("DELETE", "/api/session")).status).toBe(409);
-    await call("POST", "/api/session", { configuration: "sample" });
-    expect((await call("DELETE", "/api/session")).status).toBe(200);
+    expect((await call("DELETE", "/api/run")).status).toBe(409);
+    await call("POST", "/api/run", { configuration: "sample" });
+    expect((await call("DELETE", "/api/run")).status).toBe(200);
     expect(fake.ptys[0]!.killed).toBe("SIGHUP");
     await settle();
-    expect(sessions.getState().status).toBe("idle");
+    expect(runs.getState().status).toBe("idle");
   });
 
   it("rejects an unknown configuration", async () => {
-    expect((await call("POST", "/api/session", { configuration: "nope" })).status).toBe(404);
+    expect((await call("POST", "/api/run", { configuration: "nope" })).status).toBe(404);
   });
 });
 
 describe("terminal", () => {
   it("replays the scrollback, streams the output and forwards input and resizes", async () => {
     await call("PUT", "/api/configurations/sample", asUpload(sampleFiles()));
-    await call("POST", "/api/session", { configuration: "sample" });
+    await call("POST", "/api/run", { configuration: "sample" });
     fake.ptys[0]!.emit("hello ");
 
     await app.ready();
@@ -187,7 +186,7 @@ describe("terminal", () => {
     await settle();
     expect(messages[0]).toMatchObject({ type: "state", state: { status: "running" } });
     expect(messages[1]!.type).toBe("output");
-    expect(messages[1]!.data).toContain("== Session session_01");
+    expect(messages[1]!.data).toContain("== Claude Code");
     expect(messages[1]!.data!.endsWith("hello ")).toBe(true);
 
     fake.ptys[0]!.emit("world");

@@ -1,7 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useRef } from "preact/hooks";
-import type { SessionState } from "./api.js";
+import type { RunState } from "./api.js";
 
 export interface TerminalHandle {
   size(): { cols: number; rows: number };
@@ -9,11 +9,11 @@ export interface TerminalHandle {
 }
 
 /**
- * The terminal of the session, attached to /api/terminal. It reconnects when the connection drops;
+ * The terminal of Claude Code, attached to /api/terminal. It reconnects when the connection drops;
  * the server replays its scrollback, so a reload gets the screen back.
  */
 export function Terminal({ onState, onConnected, handle }: {
-  onState: (state: SessionState) => void;
+  onState: (state: RunState) => void;
   onConnected: (connected: boolean) => void;
   handle: { current: TerminalHandle | undefined };
 }) {
@@ -54,8 +54,8 @@ export function Terminal({ onState, onConnected, handle }: {
       ws.onmessage = (event) => {
         const message = JSON.parse(event.data as string);
         if (message.type === "state") {
-          const state = message.state as SessionState;
-          // A new session, or a reconnection that replays the scrollback: start from a clean screen.
+          const state = message.state as RunState;
+          // A new run, or a reconnection that replays the scrollback: start from a clean screen.
           if (first || state.status === "starting") term.reset();
           first = false;
           callbacks.current.onState(state);

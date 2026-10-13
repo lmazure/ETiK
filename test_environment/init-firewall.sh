@@ -9,9 +9,9 @@
 #   --host-port  a TCP port to allow on the Docker host (host.docker.internal)
 #
 # Without argument, only the base domains are allowed: this is the state of the
-# container between two sessions. The ETiK console (running as root) re-runs this
-# script with the domains and host ports of the configuration when a session
-# starts, and without argument when it ends.
+# container between two runs of Claude Code. The ETiK console (running as root)
+# re-runs this script with the domains and host ports of the configuration when
+# Claude Code starts, and without argument when it ends.
 #
 # Requires: root, the NET_ADMIN + NET_RAW capabilities (docker-compose.yml) and
 # the packages iptables, ipset, dnsutils (dig), curl.
@@ -24,8 +24,8 @@ IFS=$'\n\t'
 #    - claude.ai: browser OAuth login flow + token refresh (Claude subscription)
 #    NOTE 1: these are CDN-fronted (Cloudflare etc.) so their IPs rotate. We
 #    resolve them when the script runs, i.e. at container start and at each
-#    session start; if login/API calls start failing intermittently, start a
-#    new session to refresh them.
+#    start of Claude Code; if login/API calls start failing intermittently,
+#    restart Claude Code to refresh them.
 #    NOTE 2: this assumes a Claude subscription login. If you instead log in with
 #    an Anthropic Console account, add console.anthropic.com.
 #    NOTE 3: Claude Code's telemetry hosts (statsig.anthropic.com / sentry.io) are
@@ -36,7 +36,7 @@ BASE_DOMAINS=(api.anthropic.com claude.ai)
 # Port of the ETiK console inside the container.
 ETIK_PORT="${ETIK_PORT:-7681}"
 # The user Claude Code runs as: it must never reach the console, otherwise it could
-# upload a looser configuration or start another session.
+# upload a looser configuration or start another Claude Code.
 AGENT_USER="${ETIK_AGENT_USER:-node}"
 
 DOMAINS=("${BASE_DOMAINS[@]}")

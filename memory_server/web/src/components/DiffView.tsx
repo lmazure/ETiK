@@ -22,7 +22,7 @@ export function DiffView({ store, id, from, to }: { store: string; id: number; f
         </h2>
         <p class="muted">
           v{to}: {OP_LABEL[after.op]} {formatTime(after.created_at)} by {after.actor}
-          {after.session && <> · {after.session}</>}{after.change_note && <> · “{after.change_note}”</>}
+          {after.change_note && <> · “{after.change_note}”</>}
         </p>
         <nav class="diff-nav">
           {from > 1 && <Link to={{ name: "diff", store, id, from: from - 1, to: from }}>← previous change</Link>}

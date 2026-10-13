@@ -162,7 +162,7 @@ describe("move, delete, history and restore", () => {
     expect(errorOf(() => t.read({ path: "/a.md" })).code).toBe("NOT_FOUND");
     const history = t.history({ path: "/archive/a.md" });
     expect(history.versions.map((v) => [v.version, v.op, v.path])).toEqual([[2, "move", "/archive/a.md"], [1, "create", "/a.md"]]);
-    expect(history.versions[0]).toMatchObject({ change_note: "archive", session: "session_01", actor: "agent:squashtm" });
+    expect(history.versions[0]).toMatchObject({ change_note: "archive", actor: "agent:squashtm" });
   });
 
   it("refuses to move onto an existing document unless overwrite", () => {

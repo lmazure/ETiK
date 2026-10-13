@@ -14,7 +14,7 @@ afterEach(async () => {
   await app.close();
 });
 
-const agent = { authorization: `Bearer ${AGENT_TOKEN}`, "x-memory-session": "session_02" };
+const agent = { authorization: `Bearer ${AGENT_TOKEN}` };
 const admin = { authorization: `Bearer ${ADMIN_TOKEN}` };
 const base = "/api/stores/squashtm";
 
@@ -138,7 +138,7 @@ describe("other operations", () => {
     expect(move.json().moved).toEqual([{ from: "/entities/a.md", to: "/archive/a.md", version: 2 }]);
 
     const history = await app.inject({ method: "GET", url: `${base}/history/archive/a.md`, headers: agent });
-    expect(history.json().versions.map((v: { op: string; session: string }) => [v.op, v.session])).toEqual([["move", "session_02"], ["create", "session_02"]]);
+    expect(history.json().versions.map((v: { op: string; actor: string }) => [v.op, v.actor])).toEqual([["move", "agent:squashtm"], ["create", "agent:squashtm"]]);
 
     expect((await app.inject({ method: "DELETE", url: `${base}/docs/archive`, headers: agent })).statusCode).toBe(409);
     const deleted = await app.inject({ method: "DELETE", url: `${base}/docs/archive?recursive=true`, headers: agent });

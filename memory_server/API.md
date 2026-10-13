@@ -40,9 +40,9 @@ The three kinds of tokens must all differ. A token listed for several stores in 
 - MCP: the `X-Memory-Store` header. It can be omitted when the agent token reaches exactly one store; otherwise the call fails (400, `No store selected; set the x-memory-store header`).
 - REST: the `{store}` segment of the URL. `X-Memory-Store` is ignored.
 
-**Session.** The optional `X-Memory-Session` header (both interfaces) is recorded with each change in the history. The history also records the actor: `admin` or `agent:<store>[+<store>…]`.
+**Actor.** The history records, with each change, the actor that made it: `admin` or `agent:<store>[+<store>…]`.
 
-Store and session never come from tool arguments.
+The store never comes from tool arguments.
 
 ## Common rules
 
@@ -80,7 +80,7 @@ Violations give `INVALID_PATH` (or `IS_FOLDER` when the path is an existing fold
 
 ### Atomicity, soft delete, history
 
-- Every write call, and every batch, runs in one transaction and records one changeset (actor, session, change note). On any error nothing is applied.
+- Every write call, and every batch, runs in one transaction and records one changeset (actor, change note). On any error nothing is applied.
 - Deletion is soft: the document leaves listings and searches, its path is free again, all its versions stay. Only the admin can restore it (REST `restore`).
 - Versions are append-only; nothing is ever overwritten.
 
@@ -89,7 +89,7 @@ Violations give `INVALID_PATH` (or `IS_FOLDER` when the path is an existing fold
 ### Transport
 
 - `POST /mcp`, JSON-RPC 2.0, Streamable HTTP in **stateless** mode with JSON responses (`Accept: application/json, text/event-stream`).
-- No session: `tools/list` and `tools/call` work without a prior `initialize`.
+- Stateless: `tools/list` and `tools/call` work without a prior `initialize`.
 - `GET /mcp` and `DELETE /mcp` return 405 with `Allow: POST`.
 - Server info: name `memory-server`, version `0.1.0`.
 - Authentication and store selection happen before any MCP processing. Failures are JSON-RPC errors with HTTP status 401 (with `WWW-Authenticate: Bearer`), 403 or 400:
@@ -155,7 +155,7 @@ path: /entities/requirement.md
 version: 4
 description: Requirement entity
 tags: entity
-metadata: source=session_07
+metadata: source=user-guide
 updated: 2026-10-11T08:12:45.120Z
 section: ## UI pages
 lines 12-15 of 40
@@ -328,8 +328,8 @@ OK 2 operations applied atomically
 
 ```
 History of /entities/requirement.md: 5 versions, current 5 (newest first)
-v5 · 2026-10-11T08:12:45.120Z · edit · session session_07 · agent:squashtm · 1.3 KB · "Add the UI page"
-v4 · 2026-10-10T16:05:02.441Z · move to /entities/requirement.md · session - · admin · 1.2 KB
+v5 · 2026-10-11T08:12:45.120Z · edit · agent:squashtm · 1.3 KB · "Add the UI page"
+v4 · 2026-10-10T16:05:02.441Z · move to /entities/requirement.md · admin · 1.2 KB
 ```
 
 `op` is `create`, `overwrite`, `edit`, `move`, `delete` or `restore`; moves and restores show the path they led to. When versions are left out, a last line says `(N older versions not shown; raise limit)`.
@@ -479,7 +479,7 @@ Response: `201` when created, else `200`, with `ETag` and the write result:
 
 ```json
 {"path": "/entities/requirement.md", "doc_id": 3, "current_version": 5, "total": 5, "versions": [
-  {"version": 5, "op": "edit", "path": "/entities/requirement.md", "created_at": "…", "change_note": "Add the UI page", "session": "session_07", "actor": "agent:squashtm", "size": 1290}
+  {"version": 5, "op": "edit", "path": "/entities/requirement.md", "created_at": "…", "change_note": "Add the UI page", "actor": "agent:squashtm", "size": 1290}
 ]}
 ```
 
@@ -488,7 +488,7 @@ Response: `201` when created, else `200`, with `ETag` and the write result:
 Deleted documents, most recently deleted first. `version` is the deletion version; `doc_id` is what `restore` takes.
 
 ```json
-{"deleted": [{"doc_id": 9, "path": "/old.md", "version": 3, "size": 120, "deleted_at": "…", "deleted_by": "agent:squashtm", "session": "session_05"}]}
+{"deleted": [{"doc_id": 9, "path": "/old.md", "version": 3, "size": 120, "deleted_at": "…", "deleted_by": "agent:squashtm"}]}
 ```
 
 ### `GET /api/stores/{store}/changes`
@@ -499,7 +499,7 @@ Query: `since` (changes after this id, oldest first) or `before` (changes before
 
 ```json
 {"latest": 57, "changes": [
-  {"id": 57, "created_at": "…", "actor": "agent:squashtm", "session": "session_07", "change_note": "Add the UI page",
+  {"id": 57, "created_at": "…", "actor": "agent:squashtm", "change_note": "Add the UI page",
    "items": [{"doc_id": 3, "path": "/entities/requirement.md", "version": 5, "op": "edit"}]}
 ]}
 ```
@@ -526,7 +526,7 @@ One stored version with its content:
 ```json
 {"doc_id": 3, "version": 4, "current_version": 5, "deleted": false, "op": "move", "path": "/entities/requirement.md",
  "content": "# Requirement\n…", "description": "…", "tags": [], "metadata": {}, "size": 1210,
- "created_at": "…", "actor": "admin", "session": null, "change_note": null}
+ "created_at": "…", "actor": "admin", "change_note": null}
 ```
 
 ### `POST /api/stores/{store}/restore`

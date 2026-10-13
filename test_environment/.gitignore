@@ -1,4 +1,3 @@
 *.png
-/session_*
 /workspace/
 memory.env

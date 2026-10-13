@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Pty, SessionDeps } from "../src/session.js";
+import type { Pty, RunDeps } from "../src/run.js";
 import type { Settings } from "../src/settings.js";
 import { listFiles } from "../src/store.js";
 
@@ -74,7 +74,7 @@ export class FakePty implements Pty {
   exit(exitCode: number) { this.exitListener({ exitCode }); }
 }
 
-/** Dependencies that record what the session does instead of doing it. */
+/** Dependencies that record what the run does instead of doing it. */
 export function fakeDeps(env: NodeJS.ProcessEnv = {}) {
   const calls = {
     firewall: [] as Array<{ domains: string[]; hostPorts: number[] }>,
@@ -84,7 +84,7 @@ export function fakeDeps(env: NodeJS.ProcessEnv = {}) {
   };
   const ptys: FakePty[] = [];
   let status = 200;
-  const deps: SessionDeps = {
+  const deps: RunDeps = {
     spawnClaude: (args, options) => {
       calls.spawned.push({ args, ...options });
       const pty = new FakePty();
@@ -106,5 +106,5 @@ export function fakeDeps(env: NodeJS.ProcessEnv = {}) {
   return { deps, calls, ptys, setStatus: (s: number) => { status = s; } };
 }
 
-/** Lets the promise callbacks run (the end of a session is asynchronous). */
+/** Lets the promise callbacks run (the end of a run is asynchronous). */
 export const settle = () => new Promise((resolve) => setTimeout(resolve, 10));

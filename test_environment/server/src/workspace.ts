@@ -8,19 +8,8 @@ export interface Owner {
   gid: number;
 }
 
-/** Name of the next session directory: session_01, session_02… after the highest existing number. */
-export function nextSessionName(workspaceDir: string): string {
-  let last = 0;
-  for (const entry of existsSync(workspaceDir) ? readdirSync(workspaceDir, { withFileTypes: true }) : []) {
-    const match = /^session_(\d+)$/.exec(entry.name);
-    if (entry.isDirectory() && match) last = Math.max(last, Number(match[1]));
-  }
-  return `session_${String(last + 1).padStart(2, "0")}`;
-}
-
 /**
- * Prepares the workspace for a session of `configuration`:
- * - creates the session directory;
+ * Prepares the workspace for a run of `configuration`:
  * - replaces `.claude/skills/` with the built-in skills and the configuration's skills;
  *   a built-in skill also brings the other files its installer produced (e.g. `.playwright/cli.config.json`),
  *   unless the configuration has its own skill of the same name, which replaces it;
@@ -31,12 +20,8 @@ export function prepareWorkspace(
   workspaceDir: string,
   configuration: Configuration,
   builtinDir: string,
-  sessionName: string,
   owner: Owner | undefined,
 ): void {
-  mkdirSync(join(workspaceDir, sessionName), { recursive: true });
-  chown(join(workspaceDir, sessionName), owner);
-
   const claudeDir = join(workspaceDir, ".claude");
   const skillsDir = join(claudeDir, "skills");
   rmSync(skillsDir, { recursive: true, force: true });
@@ -93,7 +78,7 @@ export function expandVariables(text: string, env: NodeJS.ProcessEnv): string {
   });
 }
 
-/** Arguments of `claude` for a session. */
+/** Arguments of `claude` for a run. */
 export function claudeArguments(configuration: Configuration, systemPrompt: string, mcpConfigFile: string): string[] {
   const builtin = configuration.config.tools.builtin;
   return [

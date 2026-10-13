@@ -63,7 +63,7 @@ export function HistoryPanel({ store, id, diff }: {
                 <span class="time">{formatTime(v.created_at)}</span>
               </div>
               <div class="muted">
-                {v.session ?? "no session"} · {v.actor}
+                {v.actor}
                 {older && <> · {formatDelta(v.size - older.size)} B</>}
               </div>
               {v.op === "move" && older && <div class="muted">{older.path} → {v.path}</div>}

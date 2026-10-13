@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { E2E } from "../playwright.config.js";
 
-const agent = { Authorization: `Bearer ${E2E.agentToken}`, "X-Memory-Session": "session_e2e" };
+const agent = { Authorization: `Bearer ${E2E.agentToken}` };
 const docs = "/api/stores/squashtm/docs";
 
 async function create(request: APIRequestContext, path: string, text: string, description = "") {
@@ -55,7 +55,7 @@ test("a change made while a document is open is announced, not applied", async (
 
   await page.getByRole("tab", { name: /Activity/ }).click();
   await expect(page.locator(".activity .live-change")).toHaveCount(1);
-  await expect(page.locator(".activity .live-change")).toContainText("session_e2e");
+  await expect(page.locator(".activity .live-change")).toContainText("agent:squashtm");
   await expect(page.getByRole("button", { name: "Load older changes" })).toHaveCount(0);
   await page.screenshot({ path: "test-results/activity.png" });
 });

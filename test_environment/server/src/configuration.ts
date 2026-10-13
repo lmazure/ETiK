@@ -5,9 +5,9 @@ import { z } from "zod";
  * A configuration is a folder:
  * - `config.json` (see `configSchema`);
  * - the system prompt file it names;
- * - `skills/<name>/`, a skill installed at each session start, with its `SKILL.md`
+ * - `skills/<name>/`, a skill installed each time Claude Code starts, with its `SKILL.md`
  *   (the skills built into the image are installed too, unless the configuration has one of the same name);
- * - `files/`, copied as-is into the workspace at each session start.
+ * - `files/`, copied as-is into the workspace each time Claude Code starts.
  */
 export const CONFIG_FILE = "config.json";
 export const SKILLS_DIR = "skills";
@@ -40,7 +40,7 @@ export const configSchema = z.strictObject({
   }),
   /** Environment variables of the container passed on to Claude Code (e.g. tokens from memory.env). */
   env: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "must be an environment variable name")).default([]),
-  /** HTTP GETs that must answer 2xx before a session starts; `${VAR}` is expanded from the container environment. */
+  /** HTTP GETs that must answer 2xx before Claude Code starts; `${VAR}` is expanded from the container environment. */
   checks: z.array(z.strictObject({
     name: z.string().min(1),
     url: z.string().min(1),

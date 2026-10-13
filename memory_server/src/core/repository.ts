@@ -32,7 +32,6 @@ export interface VersionEntry {
   change_note: string | null;
   created_at: string;
   actor: string;
-  session: string | null;
   changeset_id: number;
 }
 
@@ -55,7 +54,6 @@ export interface Change {
   id: number;
   created_at: string;
   actor: string;
-  session: string | null;
   change_note: string | null;
   items: ChangeItem[];
 }
@@ -67,7 +65,6 @@ export interface DeletedDoc {
   size: number;
   deleted_at: string;
   deleted_by: string;
-  session: string | null;
 }
 
 export interface NewVersion {
@@ -110,7 +107,6 @@ interface VersionRow {
   change_note: string | null;
   created_at: string;
   actor: string;
-  session: string | null;
   changeset_id: number;
 }
 
@@ -171,10 +167,10 @@ export class Repository {
       FROM stores s ORDER BY s.name`).all() as { name: string; created_at: string; documents: number; deleted_documents: number }[];
   }
 
-  createChangeset(store: string, actor: string, session: string | undefined, changeNote: string | undefined, now: string): number {
+  createChangeset(store: string, actor: string, changeNote: string | undefined, now: string): number {
     const result = this.db.prepare(
-      "INSERT INTO changesets (store, actor, session, change_note, created_at) VALUES (?, ?, ?, ?, ?)",
-    ).run(store, actor, session ?? null, changeNote ?? null, now);
+      "INSERT INTO changesets (store, actor, change_note, created_at) VALUES (?, ?, ?, ?)",
+    ).run(store, actor, changeNote ?? null, now);
     return Number(result.lastInsertRowid);
   }
 
@@ -238,7 +234,7 @@ export class Repository {
 
   getVersion(docId: number, version: number): VersionEntry | undefined {
     const row = this.db.prepare(`
-      SELECT v.*, c.actor, c.session FROM versions v JOIN changesets c ON c.id = v.changeset_id
+      SELECT v.*, c.actor FROM versions v JOIN changesets c ON c.id = v.changeset_id
       WHERE v.doc_id = ? AND v.version = ?`).get(docId, version) as VersionRow | undefined;
     return row && toVersion(row);
   }
@@ -247,7 +243,7 @@ export class Repository {
   listVersions(docId: number, limit: number): Omit<VersionEntry, "content">[] {
     const rows = this.db.prepare(`
       SELECT v.doc_id, v.version, v.changeset_id, v.op, v.path, '' AS content, v.description, v.tags, v.metadata,
-        v.size, v.change_note, v.created_at, c.actor, c.session
+        v.size, v.change_note, v.created_at, c.actor
       FROM versions v JOIN changesets c ON c.id = v.changeset_id
       WHERE v.doc_id = ? ORDER BY v.version DESC LIMIT ?`).all(docId, limit) as VersionRow[];
     return rows.map((row) => {
@@ -278,10 +274,10 @@ export class Repository {
   listChanges(store: string, options: { since?: number | undefined; before?: number | undefined; limit: number }): Change[] {
     const changesets = (options.since !== undefined
       ? this.db.prepare(`
-          SELECT id, created_at, actor, session, change_note FROM changesets
+          SELECT id, created_at, actor, change_note FROM changesets
           WHERE store = ? AND id > ? ORDER BY id ASC LIMIT ?`).all(store, options.since, options.limit)
       : this.db.prepare(`
-          SELECT id, created_at, actor, session, change_note FROM changesets
+          SELECT id, created_at, actor, change_note FROM changesets
           WHERE store = ? AND id < ? ORDER BY id DESC LIMIT ?`).all(store, options.before ?? Number.MAX_SAFE_INTEGER, options.limit)
     ) as Omit<Change, "items">[];
     if (changesets.length === 0) return [];
@@ -308,7 +304,7 @@ export class Repository {
   listDeletedDocs(store: string, path?: string): DeletedDoc[] {
     return this.db.prepare(`
       SELECT d.id AS doc_id, d.path, d.head_version AS version, v.size, v.created_at AS deleted_at,
-        c.actor AS deleted_by, c.session
+        c.actor AS deleted_by
       FROM documents d
       JOIN versions v ON v.doc_id = d.id AND v.version = d.head_version
       JOIN changesets c ON c.id = v.changeset_id

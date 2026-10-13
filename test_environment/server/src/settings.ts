@@ -4,9 +4,9 @@ export interface Settings {
   port: number;
   /** Where uploaded configurations are kept (root only). */
   stateDir: string;
-  /** Working directory of Claude Code; the session_## directories accumulate there. */
+  /** Working directory of Claude Code; what the agent writes accumulates there. */
   workspaceDir: string;
-  /** Where the MCP configuration of the running session is written. */
+  /** Where the MCP configuration of the running Claude Code is written. */
   runDir: string;
   /**
    * Skills baked into the image: `<builtinDir>/<skill>/` is what the skill's installer produced,

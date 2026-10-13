@@ -16,7 +16,6 @@ const query = (name: string, type: string, description?: string) =>
 const header = (name: string, description: string) =>
   ({ name, in: "header", required: false, schema: { type: "string" }, description });
 
-const session = header("X-Memory-Session", "Session recorded in the history of each change.");
 const ifMatch = header("If-Match", "Expected current version, e.g. \"7\"; 412 if it differs.");
 
 const ok = (description: string) => ({ description, content: { "application/json": { schema: { type: "object" } } } });
@@ -87,7 +86,7 @@ export function openApiDocument(): Record<string, unknown> {
       "/api/stores/{store}/list": {
         get: {
           summary: tools.memory_list.description,
-          parameters: [store, session, query("path", "string"), query("depth", "integer"),
+          parameters: [store, query("path", "string"), query("depth", "integer"),
             query("tags", "string", "Comma-separated"), query("limit", "integer"), query("offset", "integer")],
           responses: { "200": ok("Listing"), ...errors },
         },
@@ -95,13 +94,13 @@ export function openApiDocument(): Record<string, unknown> {
       "/api/stores/{store}/docs/{path}": {
         get: {
           summary: tools.memory_read.description,
-          parameters: [store, docPath, session, query("section", "string"), query("from", "integer"),
+          parameters: [store, docPath, query("section", "string"), query("from", "integer"),
             query("to", "integer", "-1 means end of document"), query("version", "integer")],
           responses: { "200": ok("Document, with ETag header"), ...errors },
         },
         put: {
           summary: tools.memory_write.description,
-          parameters: [store, docPath, session, ifMatch,
+          parameters: [store, docPath, ifMatch,
             header("If-None-Match", "'*' to create; without it the document is overwritten and must exist.")],
           requestBody: jsonBody(writeArgs.omit({ path: true, mode: true, if_version: true })),
           responses: { "200": ok("Overwritten"), "201": ok("Created"), "409": { $ref: "#/components/responses/Error" },
@@ -109,27 +108,27 @@ export function openApiDocument(): Record<string, unknown> {
         },
         patch: {
           summary: tools.memory_edit.description,
-          parameters: [store, docPath, session, ifMatch],
+          parameters: [store, docPath, ifMatch],
           requestBody: jsonBody(editArgs.omit({ path: true })),
           responses: { "200": ok("Edited"), "412": { $ref: "#/components/responses/Error" },
             "422": { $ref: "#/components/responses/Error" }, ...errors },
         },
         delete: {
           summary: tools.memory_delete.description,
-          parameters: [store, docPath, session, ifMatch, query("recursive", "boolean"), query("change_note", "string")],
+          parameters: [store, docPath, ifMatch, query("recursive", "boolean"), query("change_note", "string")],
           responses: { "200": ok("Deleted"), "409": { $ref: "#/components/responses/Error" }, ...errors },
         },
       },
       "/api/stores/{store}/search": {
-        post: { summary: tools.memory_search.description, parameters: [store, session], requestBody: jsonBody(searchArgs),
+        post: { summary: tools.memory_search.description, parameters: [store], requestBody: jsonBody(searchArgs),
           responses: { "200": ok("Hits"), "501": { $ref: "#/components/responses/Error" }, ...errors } },
       },
       "/api/stores/{store}/move": {
-        post: { summary: tools.memory_move.description, parameters: [store, session], requestBody: jsonBody(moveArgs),
+        post: { summary: tools.memory_move.description, parameters: [store], requestBody: jsonBody(moveArgs),
           responses: { "200": ok("Moved"), "409": { $ref: "#/components/responses/Error" }, ...errors } },
       },
       "/api/stores/{store}/batch": {
-        post: { summary: tools.memory_batch.description, parameters: [store, session], requestBody: jsonBody(batchArgs),
+        post: { summary: tools.memory_batch.description, parameters: [store], requestBody: jsonBody(batchArgs),
           responses: { "200": ok("All operations applied"), ...errors } },
       },
       "/api/stores/{store}/history/{path}": {
@@ -140,7 +139,7 @@ export function openApiDocument(): Record<string, unknown> {
         get: { summary: "List deleted documents", parameters: [store], responses: { "200": ok("Deleted documents"), ...errors } },
       },
       "/api/stores/{store}/restore": {
-        post: { summary: "Restore a deleted document (admin)", parameters: [store, session], requestBody: jsonBody(restoreArgs),
+        post: { summary: "Restore a deleted document (admin)", parameters: [store], requestBody: jsonBody(restoreArgs),
           responses: { "200": ok("Restored"), "409": { $ref: "#/components/responses/Error" }, ...errors } },
       },
     },

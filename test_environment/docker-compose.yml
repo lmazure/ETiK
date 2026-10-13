@@ -10,7 +10,7 @@ services:
       - NET_RAW
     # host.docker.internal maps to the host gateway, so that Claude Code can reach
     # services published on host ports (the application under test, the memory server...), only on the
-    # ports allowed by the configuration of the session.
+    # ports allowed by the configuration of the running Claude Code.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # The console, for a browser on this host only.
@@ -21,7 +21,7 @@ services:
       - path: memory.env
         required: false
     volumes:
-      # The sessions (session_##/: charter, checklist, log, bug reports, screenshots).
+      # Working directory of Claude Code: what it writes stays on the host.
       - ./workspace:/workspace
       # Claude Code login and settings.
       - claude-config:/home/node/.claude

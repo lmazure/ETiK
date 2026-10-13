@@ -124,7 +124,7 @@ function ChangeEntry({ store, entry }: { store: string; entry: ActivityEntry }) 
     <li class={`change${live ? " live-change" : ""}`}>
       <div class="change-head">
         <span class="time">{formatTime(change.created_at)}</span>
-        <span class="who">{change.session ?? "no session"} · {change.actor}</span>
+        <span class="who">{change.actor}</span>
       </div>
       {change.change_note && <div class="note">“{change.change_note}”</div>}
       <ul class="items">
