@@ -20,7 +20,6 @@
       }
     }
   },
-  "skills": ["browser-language", "get-logs"],
   "env": ["MEMORY_URL", "MEMORY_AGENT_TOKEN"],
   "checks": [
     {

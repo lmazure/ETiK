@@ -22,7 +22,7 @@ export interface ConfigurationFile {
   content: string | null;
 }
 
-/** A stored configuration that no longer validates (e.g. it lists a skill that a new image builds in). */
+/** A stored configuration that no longer validates (e.g. a field that a new image no longer accepts). */
 export interface BrokenConfiguration {
   id: string;
   problems: string[];

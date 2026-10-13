@@ -49,7 +49,7 @@ export function summary(configuration: Configuration) {
         target: typeof server.url === "string" ? server.url : typeof server.command === "string" ? server.command : "",
       })),
     },
-    skills: config.skills,
+    skills: configuration.skills,
     env: config.env,
     checks: config.checks.map((check) => check.name),
     files: configuration.files,

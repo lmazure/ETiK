@@ -44,7 +44,7 @@ A configuration is a folder:
 <configuration>/
   config.json         see below
   system-prompt.md    appended to Claude Code's system prompt (--append-system-prompt)
-  skills/<name>/      skills of the configuration
+  skills/<name>/      skills, each with its SKILL.md
   files/              copied into the workspace at each session start
 ```
 
@@ -58,9 +58,10 @@ A configuration is a folder:
 | `hostPorts` | Ports Claude Code may reach on the host (`host.docker.internal`). |
 | `tools.builtin` | Claude Code built-in tools (`claude --tools`): `"default"` for all of them, or a list of names such as `["Bash", "Read", "Edit"]`. |
 | `tools.mcpServers` | MCP servers, in the `mcpServers` format of `.mcp.json` (`${VAR}` and `${VAR:-default}` are expanded by Claude Code). Only these are loaded (`--strict-mcp-config`). |
-| `skills` | Names of the configuration's skills, each a folder `skills/<name>/`. The skills built into the image (`playwright-cli`) are always installed and must not be listed; a configuration skill of the same name replaces a built-in one. A built-in skill also brings the files its installer wrote: `playwright-cli` comes with `.playwright/cli.config.json` (Chromium), which `files/` can override. |
 | `env` | Variables of the container (e.g. from `memory.env`) passed on to Claude Code. |
 | `checks` | `{name, url, headers}`: HTTP GETs that must answer 2xx before the session starts (`${VAR}` expanded from the container environment). |
+
+Skills are not listed in `config.json`: every folder `skills/<name>/` of the configuration is installed, and must hold a `SKILL.md`. The skills built into the image (`playwright-cli`) are installed in every session too; a configuration skill of the same name replaces a built-in one. A built-in skill also brings the files its installer wrote: `playwright-cli` comes with `.playwright/cli.config.json` (Chromium), which `files/` can override.
 
 The memory store is a parameter of the configuration: the `X-Memory-Store` header of its memory MCP server, e.g. `"X-Memory-Store": "my-store"`, and a check on `${MEMORY_URL:-http://host.docker.internal:9501}/api/stores/my-store/list?depth=1&limit=1` with the agent token, which fails if the token cannot reach the store.
 

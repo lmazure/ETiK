@@ -21,7 +21,7 @@ if (isRoot) {
 }
 
 const skills = () => builtinSkills(settings.builtinDir);
-const store = new ConfigurationStore(settings.stateDir, skills);
+const store = new ConfigurationStore(settings.stateDir);
 const sessions = new SessionManager(settings, store, {
   spawnClaude: (args, options) => {
     const [file, fileArgs] = isRoot

@@ -5,7 +5,8 @@ import { z } from "zod";
  * A configuration is a folder:
  * - `config.json` (see `configSchema`);
  * - the system prompt file it names;
- * - `skills/<name>/` for each of its skills (the skills built into the image are always installed);
+ * - `skills/<name>/`, a skill installed at each session start, with its `SKILL.md`
+ *   (the skills built into the image are installed too, unless the configuration has one of the same name);
  * - `files/`, copied as-is into the workspace at each session start.
  */
 export const CONFIG_FILE = "config.json";
@@ -37,8 +38,6 @@ export const configSchema = z.strictObject({
     /** MCP servers, in the `mcpServers` format of `.mcp.json`; `${VAR}` is expanded by Claude Code. */
     mcpServers: z.record(name, z.record(z.string(), z.unknown())).default({}),
   }),
-  /** Skills of the configuration, each a folder `skills/<name>/`; the built-in skills are always installed and are not listed. */
-  skills: z.array(name).default([]),
   /** Environment variables of the container passed on to Claude Code (e.g. tokens from memory.env). */
   env: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "must be an environment variable name")).default([]),
   /** HTTP GETs that must answer 2xx before a session starts; `${VAR}` is expanded from the container environment. */
@@ -75,9 +74,8 @@ export function relativePath(raw: string): string {
 
 /**
  * Validates the files of a configuration folder (paths relative to the folder) and returns its config.json.
- * `builtinSkills` are the skills baked into the image: listing one without uploading it is an error.
  */
-export function validateConfiguration(files: ReadonlyMap<string, Buffer>, builtinSkills: readonly string[]): ConfigFile {
+export function validateConfiguration(files: ReadonlyMap<string, Buffer>): ConfigFile {
   const problems: string[] = [];
   if (files.size > MAX_FILES) problems.push(`too many files (${files.size}, at most ${MAX_FILES})`);
   let total = 0;
@@ -109,12 +107,23 @@ export function validateConfiguration(files: ReadonlyMap<string, Buffer>, builti
     problems.push(`${CONFIG_FILE}: systemPrompt: invalid path '${config.systemPrompt}'`);
   }
   if (promptPath !== undefined && !files.has(promptPath)) problems.push(`the system prompt file '${config.systemPrompt}' is missing`);
-  for (const skill of config.skills) {
-    if (files.has(`${SKILLS_DIR}/${skill}/SKILL.md`)) continue;
-    problems.push(builtinSkills.includes(skill)
-      ? `skill '${skill}': built into the image, always installed, remove it from skills`
-      : `skill '${skill}': ${SKILLS_DIR}/${skill}/SKILL.md is missing`);
+  for (const path of files.keys()) {
+    if (path.startsWith(`${SKILLS_DIR}/`) && path.split("/").length === 2) problems.push(`${path}: a skill is a folder ${SKILLS_DIR}/<name>/`);
+  }
+  for (const skill of skillNames(files.keys())) {
+    if (!name.safeParse(skill).success) problems.push(`skill '${skill}': invalid name, use letters, digits, '.', '_' or '-'`);
+    else if (!files.has(`${SKILLS_DIR}/${skill}/SKILL.md`)) problems.push(`skill '${skill}': ${SKILLS_DIR}/${skill}/SKILL.md is missing`);
   }
   if (problems.length > 0) throw new ConfigurationError(problems);
   return config;
+}
+
+/** Names of the skills of a configuration, sorted: the folders `skills/<name>/` (paths relative to the configuration folder). */
+export function skillNames(paths: Iterable<string>): string[] {
+  const names = new Set<string>();
+  for (const path of paths) {
+    const [dir, skill, ...rest] = path.split("/");
+    if (dir === SKILLS_DIR && skill !== undefined && rest.length > 0) names.add(skill);
+  }
+  return [...names].sort();
 }

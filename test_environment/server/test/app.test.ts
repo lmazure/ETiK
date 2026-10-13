@@ -16,7 +16,7 @@ const ENV = { MEMORY_AGENT_TOKEN: "agent-secret", MEMORY_URL: "http://memory:950
 
 beforeEach(() => {
   settings = testSettings();
-  const store = new ConfigurationStore(settings.stateDir, () => ["playwright-cli"]);
+  const store = new ConfigurationStore(settings.stateDir);
   fake = fakeDeps(ENV);
   sessions = new SessionManager(settings, store, fake.deps);
   app = buildApp(store, sessions, () => ["playwright-cli"], undefined);
@@ -83,7 +83,7 @@ describe("configurations", () => {
   });
 
   it("rejects invalid uploads with the list of problems", async () => {
-    const bad = await call("PUT", "/api/configurations/bad", asUpload(minimalFiles({ skills: ["nowhere"], hostPorts: [0] })));
+    const bad = await call("PUT", "/api/configurations/bad", asUpload(minimalFiles({ hostPorts: [0] }, { "skills/nowhere/run.mjs": "" })));
     expect(bad.status).toBe(400);
     expect(bad.body.problems.length).toBeGreaterThan(0);
     expect((await call("PUT", "/api/configurations/a%20b", asUpload(minimalFiles()))).status).toBe(400);

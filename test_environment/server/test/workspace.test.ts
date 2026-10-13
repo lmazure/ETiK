@@ -10,7 +10,7 @@ let store: ConfigurationStore;
 
 beforeEach(() => {
   settings = testSettings();
-  store = new ConfigurationStore(settings.stateDir, () => ["playwright-cli"]);
+  store = new ConfigurationStore(settings.stateDir);
 });
 
 afterEach(() => settings.cleanup());
@@ -64,7 +64,7 @@ describe("prepareWorkspace", () => {
   });
 
   it("prefers an uploaded skill to a built-in one of the same name, without the built-in files", () => {
-    const configuration = store.save("c", minimalFiles({ skills: ["playwright-cli"] }, { "skills/playwright-cli/SKILL.md": "uploaded" }));
+    const configuration = store.save("c", minimalFiles({}, { "skills/playwright-cli/SKILL.md": "uploaded" }));
     prepareWorkspace(settings.workspaceDir, configuration, settings.builtinDir, "session_01", undefined);
     expect(readFileSync(join(settings.workspaceDir, ".claude", "skills", "playwright-cli", "SKILL.md"), "utf8")).toBe("uploaded");
     expect(existsSync(join(settings.workspaceDir, ".playwright"))).toBe(false);

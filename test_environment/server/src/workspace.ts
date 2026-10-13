@@ -42,14 +42,14 @@ export function prepareWorkspace(
   rmSync(skillsDir, { recursive: true, force: true });
   mkdirSync(skillsDir, { recursive: true });
   for (const skill of builtinSkills(builtinDir)) {
-    if (configuration.config.skills.includes(skill)) continue;
+    if (configuration.skills.includes(skill)) continue;
     const installed = join(builtinDir, skill);
     cpSync(join(installed, ".claude", "skills", skill), join(skillsDir, skill), { recursive: true });
     for (const entry of readdirSync(installed)) {
       if (entry !== ".claude") copyInto(workspaceDir, installed, entry, owner);
     }
   }
-  for (const skill of configuration.config.skills) {
+  for (const skill of configuration.skills) {
     cpSync(join(configuration.dir, SKILLS_DIR, skill), join(skillsDir, skill), { recursive: true });
   }
   chown(claudeDir, owner);
