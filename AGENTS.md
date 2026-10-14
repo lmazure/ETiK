@@ -26,7 +26,9 @@ Before finishing such a change:
 2. Compare the REST sections and the endpoint summary with the routes in `src/api/rest.ts`, and keep `src/api/openapi.ts` consistent with them.
 3. Update the error code table when a code, a status or a cause changes.
 4. Keep the short tool list in [`memory_server/README.md`](memory_server/README.md) and its links to `API.md` valid.
-5. When a tool is added, renamed or removed, also update the tool names used in [`test-configurations/squashtm/files/knowledge/INSTRUCTIONS.md`](test-configurations/squashtm/files/knowledge/INSTRUCTIONS.md) and in `test-configurations/squashtm/system-prompt.md`.
+5. When a tool is added, renamed or removed, also update the tool names used in the configuration examples:
+    - [`test-configurations/squashtm/files/knowledge/INSTRUCTIONS.md`](test-configurations/squashtm/files/knowledge/INSTRUCTIONS.md) and [`test-configurations/squashtm/system-prompt.md`](test-configurations/squashtm/system-prompt.md).
+    - [`test-configurations/squashtmsite/files/knowledge/INSTRUCTIONS.md`](test-configurations/squashtmsite/files/knowledge/INSTRUCTIONS.md) and [`test-configurations/squashtmsite/system-prompt.md`](test-configurations/squashtmsite/system-prompt.md).
 6. Run `npm test` in `memory_server/`.
 
 When in doubt, run the server and check the real outputs against the document.

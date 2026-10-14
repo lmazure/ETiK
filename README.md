@@ -35,7 +35,7 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
   - The agent reaches it through MCP (`memory_*` tools), with a token limited to its own store.
   - You watch it live in a read-only web app.
 
-## Usage
+## Usage example
 
 ### 1) Start SquashTM
 
