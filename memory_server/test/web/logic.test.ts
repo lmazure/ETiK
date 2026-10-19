@@ -9,7 +9,7 @@ function entry(id: number, path: string): DocumentEntry {
 }
 
 function change(items: Change["items"]): Change {
-  return { id: 1, created_at: "", actor: "agent", session: null, change_note: null, items };
+  return { id: 1, created_at: "", actor: "agent", change_note: null, items };
 }
 
 describe("tree", () => {

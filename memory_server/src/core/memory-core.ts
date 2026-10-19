@@ -17,7 +17,6 @@ export type { Change, ChangeItem, DocInfo, VersionOp } from "./repository.js";
 export interface Context {
   store: string;
   actor: string;
-  session?: string | undefined;
 }
 
 export interface CoreOptions {
@@ -110,7 +109,6 @@ export interface HistoryEntry {
   path: string;
   created_at: string;
   change_note: string | null;
-  session: string | null;
   actor: string;
   size: number;
 }
@@ -148,7 +146,6 @@ export interface VersionResult {
   size: number;
   created_at: string;
   actor: string;
-  session: string | null;
   change_note: string | null;
 }
 
@@ -439,7 +436,7 @@ export class MemoryCore {
         changesetId: () => {
           if (changesetId === undefined) {
             this.repo.ensureStore(ctx.store, now);
-            changesetId = this.repo.createChangeset(ctx.store, ctx.actor, ctx.session, changeNote, now);
+            changesetId = this.repo.createChangeset(ctx.store, ctx.actor, changeNote, now);
           }
           return changesetId;
         },
@@ -463,7 +460,7 @@ export class MemoryCore {
       path: doc.path, doc_id: doc.id, current_version: doc.version, total: this.repo.countVersions(doc.id),
       versions: this.repo.listVersions(doc.id, limit).map((v) => ({
         version: v.version, op: v.op, path: v.path, created_at: v.created_at,
-        change_note: v.change_note, session: v.session, actor: v.actor, size: v.size,
+        change_note: v.change_note, actor: v.actor, size: v.size,
       })),
     };
   }

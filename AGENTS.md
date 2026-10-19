@@ -1,7 +1,7 @@
 # Instructions for AI agents
 
 These rules apply to any AI agent changing this repository.
-The exploratory-testing agent that runs in the dev container has its own instructions in [`test_environment/CLAUDE.md`](test_environment/CLAUDE.md); only `test_environment/` is mounted there, so it never sees this file.
+The exploratory-testing agent that runs in the test container has its own instructions: the system prompt [`test-configurations/squashtm/system-prompt.md`](test-configurations/squashtm/system-prompt.md). Only `test_environment/workspace/` is mounted there, so it never sees this file.
 
 ## Keep the memory server API reference up to date
 
@@ -26,7 +26,9 @@ Before finishing such a change:
 2. Compare the REST sections and the endpoint summary with the routes in `src/api/rest.ts`, and keep `src/api/openapi.ts` consistent with them.
 3. Update the error code table when a code, a status or a cause changes.
 4. Keep the short tool list in [`memory_server/README.md`](memory_server/README.md) and its links to `API.md` valid.
-5. When a tool is added, renamed or removed, also update the tool names used in [`test_environment/knowledge/INSTRUCTIONS.md`](test_environment/knowledge/INSTRUCTIONS.md) and in `test_environment/CLAUDE.md`.
+5. When a tool is added, renamed or removed, also update the tool names used in the configuration examples:
+    - [`test-configurations/squashtm/files/knowledge/INSTRUCTIONS.md`](test-configurations/squashtm/files/knowledge/INSTRUCTIONS.md) and [`test-configurations/squashtm/system-prompt.md`](test-configurations/squashtm/system-prompt.md).
+    - [`test-configurations/squashtmsite/files/knowledge/INSTRUCTIONS.md`](test-configurations/squashtmsite/files/knowledge/INSTRUCTIONS.md) and [`test-configurations/squashtmsite/system-prompt.md`](test-configurations/squashtmsite/system-prompt.md).
 6. Run `npm test` in `memory_server/`.
 
 When in doubt, run the server and check the real outputs against the document.

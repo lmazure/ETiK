@@ -11,7 +11,7 @@ Creates an issue in https://gitlab.com/henixdevelopment/squash/squash-tm/core/sq
 ## Quick start
 
 ```bash
-node .claude/skills/report-bug/scripts/report-bug.mjs test_environment/session_13/bug_002.md --priority Medium
+node .claude/skills/report-bug/scripts/report-bug.mjs test_environment/workspace/session_13/bug_002.md --priority Medium
 ```
 
 ## Options

@@ -2,7 +2,7 @@
 
 The knowledge base is a durable, cross-Session memory about the SUT. It lives in the **memory server**, in the store `squashtm`, and is reached **only** through the `memory_*` tools (`memory_list`, `memory_read`, `memory_search`, `memory_write`, `memory_edit`, `memory_move`, `memory_delete`, `memory_batch`, `memory_history`). It is a set of Markdown **documents** addressed by path (e.g. `/entities/requirement.md`).
 
-The memory server keeps every version of every document and records, for each change, the Session that made it (the launcher sends `$MEMORY_SESSION` with every call) and its `change_note`. Nothing is ever lost: an overwritten passage or a deleted document can always be found in the history. People watch the knowledge base live in the memory server's web app.
+The memory server keeps every version of every document and records, for each change, its `change_note`, which starts with the Session that made it (see "Update protocol"). Nothing is ever lost: an overwritten passage or a deleted document can always be found in the history. People watch the knowledge base live in the memory server's web app.
 
 Never keep SUT knowledge in local files, and never fall back to local files: if the `memory_*` tools are missing or report that the server is unreachable, tell the user and stop.
 
@@ -42,8 +42,8 @@ Every fact carries a tag so the memory can be trusted and curated:
 - `assumed` — an unverified inference. Must be re-checked before being relied upon.
 
 Always record the **Session** and **date**, plus — for `documented` — the source name.
-Format: `<tag>, session_##, YYYY-MM-DD[, <source name>]` (e.g. `observed, session_03, 2026-06-24`), where `session_##` is the current Session (`$MEMORY_SESSION`).
-The Session lets you trace a fact back to its `session_##/log.md` for the full context; `memory_history` also shows which Session changed what.
+Format: `<tag>, session_##, YYYY-MM-DD[, <source name>]` (e.g. `observed, session_03, 2026-06-24`), where `session_##` is the name of the current Session (its directory).
+The Session lets you trace a fact back to its `session_##/log.md` for the full context; `memory_history` also shows which Session changed what, through the change notes.
 
 ## Entity document schema
 
@@ -93,7 +93,7 @@ Cross-cutting rules go in `/business-rules.md` using the same `## Business rules
 
 ## Update protocol (two phases)
 
-Give every change a short `change_note` saying why it is made (e.g. `Requirement creation page observed`), like a commit message.
+Give every change a short `change_note` that starts with the current Session and says why the change is made (e.g. `session_03: Requirement creation page observed`), like a commit message.
 
 1. **Capture — continuously, append-only.** The moment a durable fact is confirmed (from a provided source in Stage 1, or during testing in Stage 3/4), record it with a source tag, Session, and date. Capture is cheap and resists Session crashes.
    - First check that it is not already recorded: `memory_search` for the page URL, the endpoint path, or the rule's key words.

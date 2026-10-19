@@ -14,7 +14,7 @@ afterEach(async () => {
   await app.close();
 });
 
-const agent = { authorization: `Bearer ${AGENT_TOKEN}`, "x-memory-session": "session_03" };
+const agent = { authorization: `Bearer ${AGENT_TOKEN}` };
 const viewer = { authorization: `Bearer ${VIEWER_TOKEN}` };
 const admin = { authorization: `Bearer ${ADMIN_TOKEN}` };
 const base = "/api/stores/squashtm";
@@ -77,7 +77,7 @@ describe("change feed", () => {
     expect(after.latest).toBe(cursor + 2);
     expect(after.changes).toEqual([
       expect.objectContaining({
-        id: cursor + 1, actor: "agent:squashtm", session: "session_03", change_note: "add b",
+        id: cursor + 1, actor: "agent:squashtm", change_note: "add b",
         items: [{ doc_id: 1, path: "/a.md", version: 2, op: "edit" }],
       }),
       expect.objectContaining({
@@ -122,7 +122,7 @@ describe("documents by id", () => {
     expect(history.versions.map((v: { version: number; op: string; path: string }) => [v.version, v.op, v.path])).toEqual([
       [4, "delete", "/b.md"], [3, "move", "/b.md"], [2, "edit", "/a.md"], [1, "create", "/a.md"],
     ]);
-    expect(history.versions[2]).toMatchObject({ change_note: "add two", session: "session_03" });
+    expect(history.versions[2]).toMatchObject({ change_note: "add two", actor: "agent:squashtm" });
     expect(history.versions[0].content).toBeUndefined();
 
     const v2 = (await call("GET", `${base}/documents/1/versions/2`, viewer)).body;

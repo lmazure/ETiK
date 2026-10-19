@@ -1,0 +1,34 @@
+# ETiK test container: `docker compose up -d --build`, then open http://localhost:7681 (see README.md).
+services:
+  etik:
+    container_name: etik
+    build: .
+    image: etik:latest
+    # NET_ADMIN / NET_RAW let the console program the egress firewall (init-firewall.sh).
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    # host.docker.internal maps to the host gateway, so that Claude Code can reach
+    # services published on host ports (the application under test, the memory server...), only on the
+    # ports allowed by the configuration of the running Claude Code.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # The console, for a browser on this host only.
+    ports:
+      - "127.0.0.1:${ETIK_PORT:-7681}:7681"
+    # Variables that configurations may pass on to Claude Code (their "env" list), e.g. the memory agent token.
+    env_file:
+      - path: memory.env
+        required: false
+    volumes:
+      # Working directory of Claude Code: what it writes stays on the host.
+      - ./workspace:/workspace
+      # Claude Code login and settings.
+      - claude-config:/home/node/.claude
+      # Uploaded configurations.
+      - etik-state:/var/lib/etik
+    restart: unless-stopped
+
+volumes:
+  claude-config:
+  etik-state:

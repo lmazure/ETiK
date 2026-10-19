@@ -1,0 +1,31 @@
+{
+  "name": "Sample configuration",
+  "systemPrompt": "system-prompt.md",
+  "domains": ["docs.example.com"],
+  "hostPorts": [8080, 9501],
+  "tools": {
+    "builtin": "default",
+    "mcpServers": {
+      "memory": {
+        "type": "http",
+        "url": "${MEMORY_URL:-http://host.docker.internal:9501}/mcp",
+        "headers": {
+          "Authorization": "Bearer ${MEMORY_AGENT_TOKEN:-}",
+          "X-Memory-Store": "sample"
+        }
+      }
+    }
+  },
+  "env": ["MEMORY_URL", "MEMORY_AGENT_TOKEN"],
+  "checks": [
+    {
+      "name": "memory server",
+      "url": "${MEMORY_URL:-http://host.docker.internal:9501}/health"
+    },
+    {
+      "name": "memory agent token",
+      "url": "${MEMORY_URL:-http://host.docker.internal:9501}/api/stores/sample/list?depth=1&limit=1",
+      "headers": { "Authorization": "Bearer ${MEMORY_AGENT_TOKEN}" }
+    }
+  ]
+}

@@ -19,7 +19,7 @@ interface Newer {
   version: number;
   item: ChangeItem;
   created_at: string;
-  session: string | null;
+  actor: string;
 }
 
 /**
@@ -37,7 +37,7 @@ export function DocumentView({ store, id, version, line }: { store: string; id: 
     setNewer(undefined);
     return onLiveChange((change) => {
       for (const item of change.items) {
-        if (item.doc_id === id) setNewer({ version: item.version, item, created_at: change.created_at, session: change.session });
+        if (item.doc_id === id) setNewer({ version: item.version, item, created_at: change.created_at, actor: change.actor });
       }
     });
   }, [store, id, version]);
@@ -60,7 +60,7 @@ export function DocumentView({ store, id, version, line }: { store: string; id: 
           <span>
             {openedAsCurrent && newer ? "Changed since you opened it: " : `You are viewing v${shown.version}; `}
             {deleted ? `the document was deleted in v${latest}` : `v${latest} is the current version`}
-            {newer && <span class="muted"> ({OP_LABEL[newer.item.op]} · {newer.session ?? "no session"} · {formatTime(newer.created_at)})</span>}
+            {newer && <span class="muted"> ({OP_LABEL[newer.item.op]} · {newer.actor} · {formatTime(newer.created_at)})</span>}
           </span>
           <span class="actions">
             <Link to={{ name: "doc", store, id, version: latest }}>View v{latest}</Link>
@@ -82,8 +82,7 @@ export function DocumentView({ store, id, version, line }: { store: string; id: 
           {Object.entries(shown.metadata).map(([k, v]) => <span class="kv" key={k}>{k}: {v}</span>)}
         </div>
         <p class="muted">
-          {OP_LABEL[shown.op]} {formatTime(shown.created_at)} by {shown.actor}
-          {shown.session && <> · {shown.session}</>} · {formatSize(shown.size)}
+          {OP_LABEL[shown.op]} {formatTime(shown.created_at)} by {shown.actor} · {formatSize(shown.size)}
           {shown.change_note && <> · “{shown.change_note}”</>}
         </p>
         <div class="toggle" role="group" aria-label="Display">

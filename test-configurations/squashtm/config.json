@@ -1,0 +1,34 @@
+{
+  "name": "SquashTM exploratory testing",
+  "systemPrompt": "system-prompt.md",
+  "domains": [
+    "tm-en.doc.squashtest.com",
+    "tm-fr.doc.squashtest.com"
+  ],
+  "hostPorts": [8090, 9501],
+  "tools": {
+    "builtin": "default",
+    "mcpServers": {
+      "memory": {
+        "type": "http",
+        "url": "${MEMORY_URL:-http://host.docker.internal:9501}/mcp",
+        "headers": {
+          "Authorization": "Bearer ${MEMORY_AGENT_TOKEN:-}",
+          "X-Memory-Store": "squashtm"
+        }
+      }
+    }
+  },
+  "env": ["MEMORY_URL", "MEMORY_AGENT_TOKEN"],
+  "checks": [
+    {
+      "name": "memory server",
+      "url": "${MEMORY_URL:-http://host.docker.internal:9501}/health"
+    },
+    {
+      "name": "memory agent token",
+      "url": "${MEMORY_URL:-http://host.docker.internal:9501}/api/stores/squashtm/list?depth=1&limit=1",
+      "headers": { "Authorization": "Bearer ${MEMORY_AGENT_TOKEN}" }
+    }
+  ]
+}

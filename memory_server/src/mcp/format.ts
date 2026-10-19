@@ -121,7 +121,7 @@ export function formatHistory(result: HistoryResult): string {
   for (const v of result.versions) {
     out.push([
       `v${v.version}`, v.created_at, v.op === "move" || v.op === "restore" ? `${v.op} to ${v.path}` : v.op,
-      `session ${v.session ?? "-"}`, v.actor, size(v.size), v.change_note ? `"${v.change_note}"` : "",
+      v.actor, size(v.size), v.change_note ? `"${v.change_note}"` : "",
     ].filter((s) => s !== "").join(" · "));
   }
   if (result.total > result.versions.length) out.push(`(${result.total - result.versions.length} older versions not shown; raise limit)`);

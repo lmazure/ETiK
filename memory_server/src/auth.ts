@@ -26,7 +26,6 @@ function digest(value: string): Buffer {
 }
 
 export const STORE_HEADER = "x-memory-store";
-export const SESSION_HEADER = "x-memory-session";
 
 /**
  * Static bearer tokens. An agent token reaches only its own store(s) and no admin operation;
@@ -86,7 +85,7 @@ export class Authenticator {
   }
 
   /** Builds the core context for a store; the store must be reachable by the principal. */
-  context(principal: Principal, store: string | undefined, session: string | undefined): Context {
+  context(principal: Principal, store: string | undefined): Context {
     let resolved = store;
     if (resolved === undefined || resolved === "") {
       if (principal.role === "agent" && principal.stores.length === 1) resolved = principal.stores[0]!;
@@ -96,7 +95,7 @@ export class Authenticator {
     if (!this.canAccess(principal, resolved)) {
       throw new AuthError(403, `This token cannot access store '${resolved}'`);
     }
-    return { store: resolved, actor: principal.name, session: session || undefined };
+    return { store: resolved, actor: principal.name };
   }
 }
 

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { FastifyBaseLogger, FastifyInstance, FastifyReply } from "fastify";
-import { AuthError, SESSION_HEADER, STORE_HEADER, headerValue, type Authenticator } from "../auth.js";
+import { AuthError, STORE_HEADER, headerValue, type Authenticator } from "../auth.js";
 import { MemoryError } from "../core/errors.js";
 import type { Context, MemoryCore } from "../core/memory-core.js";
 import { tools, type ToolName } from "../schemas.js";
@@ -37,7 +37,7 @@ function meta(name: ToolName) {
   };
 }
 
-/** One MCP server per request: the store and session come from that request's headers. */
+/** One MCP server per request: the store comes from that request's headers. */
 export function buildMcpServer(core: MemoryCore, ctx: Context, maxOutputChars: number, logger: FastifyBaseLogger): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
   server.registerTool("memory_list", { ...meta("memory_list"), inputSchema: tools.memory_list.schema },
@@ -72,7 +72,7 @@ export function registerMcp(app: FastifyInstance, core: MemoryCore, auth: Authen
     try {
       const principal = auth.authenticate(request.headers.authorization);
       if (principal.role === "viewer") throw new AuthError(403, "The viewer token is for people (web app and REST reads), not for MCP");
-      ctx = auth.context(principal, headerValue(request.headers[STORE_HEADER]), headerValue(request.headers[SESSION_HEADER]));
+      ctx = auth.context(principal, headerValue(request.headers[STORE_HEADER]));
     } catch (error) {
       if (error instanceof AuthError) {
         if (error.status === 401) reply.header("WWW-Authenticate", "Bearer");

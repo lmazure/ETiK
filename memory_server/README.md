@@ -13,15 +13,15 @@ One container exposes the same core through:
 | Choice | Reason |
 | --- | --- |
 | The unit of memory is a **document** (Markdown text plus metadata), addressed by a **path** | The agent instructions define the structure inside documents (sections, entries); a record or graph model would hard-code one structure into the tools. A path lets the model plan a hierarchy and guess where things are. |
-| **One tool per verb** | Simpler per-tool schemas and clearer errors; a harness can withhold the write tools for a read-only session. |
+| **One tool per verb** | Simpler per-tool schemas and clearer errors; a harness can withhold the write tools from a read-only agent. |
 | Parameter names reuse those of **Anthropic's `memory` tool** (`path`, `old_str`, `new_str`, `insert_line`, `view_range`, `file_text`…) | Models have seen this vocabulary heavily in training, which reduces malformed calls. |
 | Partial edits by **unique string replace** and **heading anchor**, not by line number | Line numbers go stale between calls; "append to `## UI pages`" is one call. |
 | **Literal writes**: the store keeps exactly what the model sends | The instructions, not the store, decide what a fact looks like (unlike stores where an LLM extracts and rewrites facts). |
 | Each document carries a one-line **description** returned by `memory_list` | A model-maintained index file drifts; descriptions make the index derivable. An index document can still be kept if the instructions want one. |
 | **Keyword search** first | It answers "where is endpoint X already recorded" exactly. Semantic search is a later addition. |
-| **Optimistic concurrency**, **atomic batch**, **history** | Several sessions or agents may write the same store; "create the file and its index row in the same step"; trace a fact back, undo a bad consolidation. |
-| **Store and session fixed by the harness**, never by tool arguments | Keeps the model from writing to the wrong project; paths stay short. |
-| No notion of entity, source tag or session in the tools | That is policy and stays in the agent instructions, which can change without touching the tools. |
+| **Optimistic concurrency**, **atomic batch**, **history** | Several agents may write the same store; "create the file and its index row in the same step"; trace a fact back, undo a bad consolidation. |
+| **Store fixed by the harness**, never by tool arguments | Keeps the model from writing to the wrong project; paths stay short. |
+| No notion of entity, source tag or test session in the tools | That is policy and stays in the agent instructions, which can change without touching the tools. |
 
 ## Concepts
 
@@ -30,7 +30,7 @@ One container exposes the same core through:
 - **Document**: UTF-8 text (Markdown expected, not enforced; line endings normalized to `\n`) plus optional metadata: `description` (one line), `tags` (strings), `metadata` (free string-to-string map). Metadata is never mixed into the text.
 - **Version**: an integer per document, starting at 1 and growing by one on every change (content, metadata, move, delete, restore). Every read and write returns it. Writes accept `if_version`: on mismatch the call fails and changes nothing. A call that changes nothing creates no version.
 - **Section**: an exact Markdown heading line, e.g. `## UI pages`. It runs until the next heading of the same or higher level; headings inside fenced code blocks are ignored. A heading occurring twice makes the call fail with the line numbers.
-- **Change note**: every write accepts an optional `change_note` (like a commit message), kept in the history together with the session and the token that made the change.
+- **Change note**: every write accepts an optional `change_note` (like a commit message), kept in the history together with the token that made the change.
 - **Errors**: actionable messages saying what failed, where, and what to do. Nothing is ever partially applied.
 
 ## Tools
@@ -45,7 +45,7 @@ One container exposes the same core through:
 | `memory_move` | Rename or move a document or a folder; `overwrite` to replace an existing target. |
 | `memory_delete` | Delete a document, or a folder with `recursive`. The root cannot be deleted. Deletion is soft (see below). |
 | `memory_batch` | Apply up to 50 write / edit / move / delete calls atomically, in one change. |
-| `memory_history` | List the versions of a document, newest first, with date, operation, session, author and change note. |
+| `memory_history` | List the versions of a document, newest first, with date, operation, author and change note. |
 
 [`API.md`](API.md) details every tool (parameters, defaults, behaviour, errors, output) and every REST endpoint. The definitions themselves live in [`src/schemas.ts`](src/schemas.ts) and are published by the running server; to get them:
 
@@ -89,20 +89,20 @@ Typical errors: `old_str found 2 times (lines 12, 40); make it unique or set rep
 Nothing is ever overwritten or deleted:
 
 - `versions` holds a full snapshot (content, description, tags, metadata, path) for every version of every document. It is append-only, enforced by SQLite triggers.
-- `changesets` records, for each tool call or batch, the actor (token), the session (`X-Memory-Session` header) and the change note.
+- `changesets` records, for each tool call or batch, the actor (token) and the change note.
 - `documents` is the only mutable table: it points to the head version of each document and keeps a stable id across moves.
 
 Deleting is a soft delete: the document leaves listings and its path is free again, but all its versions stay; the admin can restore it.
 
 ## Security model
 
-The agent may run with full shell access (e.g. Claude Code in YOLO mode in a dev container). It can then read its own MCP configuration and call `/api` directly, so the design must hold even when MCP is bypassed:
+The agent may run with full shell access (e.g. Claude Code in YOLO mode in the test container). It can then read its own MCP configuration and call `/api` directly, so the design must hold even when MCP is bypassed:
 
 - Every rule is enforced in the core; the MCP and REST layers only translate and format.
 - Three kinds of tokens: an **agent** token reaches only its own store, read and write, without admin operation (restore); the **viewer** token reads every store and never writes (meant for the web app; refused on `/mcp`); the **admin** token reaches everything.
-- Store and session come from headers set in the harness configuration, never from tool arguments; the core writes them into the history.
+- The store comes from the harness configuration (`X-Memory-Store` header or REST URL), never from tool arguments; the core writes the actor into the history.
 - History and soft delete are the undo for a wrong deletion. Volume backups stay out of the agent's reach.
-- The memory host and port must be allowed in the dev container's firewall allowlist.
+- The memory host port must be allowed by the test container's firewall: `hostPorts` of the configuration.
 - The web app shows content written by an agent that browses untrusted pages: HTML found in a memory is displayed as escaped text, never interpreted; a strict Content-Security-Policy forbids inline scripts and external resources.
 
 ## Run
@@ -131,13 +131,12 @@ At least one token must be set, otherwise the server refuses to start.
 
 ## Access
 
-Registration in Claude Code, with store and session set by the harness:
+Registration in Claude Code, with the store set by the harness:
 
 ```bash
 claude mcp add --transport http memory http://memory:9501/mcp \
   --header "Authorization: Bearer $MEMORY_AGENT_TOKEN" \
-  --header "X-Memory-Store: squashtm" \
-  --header "X-Memory-Session: session_07"
+  --header "X-Memory-Store: squashtm"
 ```
 
 `X-Memory-Store` can be omitted when the token reaches a single store.
@@ -145,7 +144,7 @@ claude mcp add --transport http memory http://memory:9501/mcp \
 REST examples (`{store}` in the URL; document paths follow `/docs/`):
 
 ```bash
-H=(-H "Authorization: Bearer $TOKEN" -H "X-Memory-Session: session_07" -H "Content-Type: application/json")
+H=(-H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json")
 B=http://localhost:9501/api/stores/squashtm
 
 # create (If-None-Match: *), read (ETag), edit with optimistic concurrency (If-Match)
@@ -167,7 +166,7 @@ Each tool has a REST equivalent, and REST adds the store list, the change feed, 
 Open `http://localhost:9501/` and paste the viewer token (it stays in the tab, or in the browser if you tick "Remember").
 
 - **Documents** (left): the folder tree with each document's description; filter by path, description or tag. Deleted documents are listed apart, their history stays readable.
-- **Document** (center): one version, rendered Markdown or raw numbered lines, with its metadata and who changed it (actor, session, change note).
+- **Document** (center): one version, rendered Markdown or raw numbered lines, with its metadata and who changed it (actor, change note).
   A link to another memory document, absolute (`/entities/requirement.md`) or relative to the document (`requirement.md`, `../business-rules.md`), opens it in the app; a link to a document that does not exist is greyed out; any other link opens in a new tab.
 - **History** (right): every version of the open document; open any version, diff it with the previous one, or tick two versions and compare them.
 - **Diff**: path, description, tags and metadata changes, then a line diff with folded unchanged parts.
@@ -184,12 +183,13 @@ Reload the page to start from the current state again. Links are shareable (`#/s
 
 ## Use in the test environment
 
-The test dev container (`../test_environment/`) uses the store `squashtm`:
+The test container (`../test_environment/`) uses the store `squashtm`, through the configuration `../test-configurations/squashtm/`:
 
-- `.mcp.json` registers `/mcp` for Claude Code, with the agent token, the store and the session taken from the environment (`MEMORY_AGENT_TOKEN`, `MEMORY_STORE`, `MEMORY_SESSION`; `MEMORY_URL` defaults to `http://host.docker.internal:9501`).
-- `start-session.sh` reads the token from `memory.env`, checks that the server answers and accepts it, creates the next `session_##` directory and starts Claude Code with `MEMORY_SESSION` set to its name, so every change is recorded with its Exploratory Test Session.
-- `.devcontainer/init-firewall.sh` allows the memory server's host port.
-- `knowledge/INSTRUCTIONS.md` is the policy (documents, entity schema, source tags, capture and consolidation) expressed with the tools. There is no index document: `memory_list` returns each document's description.
+- `config.json` registers `/mcp` for Claude Code (`tools.mcpServers`), with the store set in the configuration (`"X-Memory-Store": "squashtm"`), and the agent token taken from the environment (`MEMORY_AGENT_TOKEN`; `MEMORY_URL` defaults to `http://host.docker.internal:9501`).
+- The container reads the token from `memory.env`. Before starting Claude Code, the ETiK console checks that the server answers and that the token reaches the store (`checks`).
+- The server knows nothing about Exploratory Test Sessions: the squashtm instructions make the agent start each `change_note` with the name of its Session (e.g. `session_03: Requirement creation page observed`), so the history still tells which Session changed what.
+- `hostPorts` allows the memory server's host port in the container's firewall.
+- `files/knowledge/INSTRUCTIONS.md` is the policy (documents, entity schema, source tags, capture and consolidation) expressed with the tools. There is no index document: `memory_list` returns each document's description.
 
 ## Not done yet
 

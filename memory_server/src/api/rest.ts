@@ -1,6 +1,6 @@
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { AuthError, SESSION_HEADER, headerValue, type Authenticator } from "../auth.js";
+import { AuthError, headerValue, type Authenticator } from "../auth.js";
 import { MemoryError, type ErrorCode } from "../core/errors.js";
 import { formatZodError, type Context, type MemoryCore } from "../core/memory-core.js";
 import {
@@ -85,7 +85,7 @@ export function registerRest(app: FastifyInstance, core: MemoryCore, auth: Authe
     const principal = auth.authenticate(request.headers.authorization);
     if (write) auth.requireWriter(principal);
     const { store } = request.params as { store: string };
-    return auth.context(principal, store, headerValue(request.headers[SESSION_HEADER]));
+    return auth.context(principal, store);
   };
   const writeContext = (request: FastifyRequest) => context(request, true);
   const admin = (request: FastifyRequest) => auth.requireAdmin(auth.authenticate(request.headers.authorization));

@@ -1,7 +1,3 @@
 *.png
-.playwright
-.playwright-cli
-.claude/skills/playwright-cli
-.claude/settings.local.json
-session_*
+/workspace/
 memory.env
