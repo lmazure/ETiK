@@ -11,10 +11,14 @@ export interface Config {
   /** Read-only token for people (web app): reads every store, never writes. */
   viewerToken: string | undefined;
   agentTokens: AgentToken[];
-  /** Maximum size of one document, in UTF-8 bytes. */
+  /** Maximum size of one text document, in UTF-8 bytes. */
   maxDocumentBytes: number;
+  /** Maximum size of one binary document (image, video), in bytes. */
+  maxFileBytes: number;
   /** Maximum size of one MCP tool result, in characters; longer reads are truncated with a notice. */
   mcpMaxOutputChars: number;
+  /** Largest image `memory_read` returns as an MCP image, in bytes; bigger ones are described only. */
+  mcpMaxImageBytes: number;
   /** Directory of the built web app; not served when missing. */
   webRoot: string | undefined;
 }
@@ -48,7 +52,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     viewerToken: env.MEMORY_VIEWER_TOKEN || undefined,
     agentTokens: parseAgentTokens(env.MEMORY_AGENT_TOKENS),
     maxDocumentBytes: integer(env, "MEMORY_MAX_DOCUMENT_BYTES", 1024 * 1024),
+    maxFileBytes: integer(env, "MEMORY_MAX_FILE_BYTES", 10 * 1024 * 1024),
     mcpMaxOutputChars: integer(env, "MEMORY_MCP_MAX_OUTPUT_CHARS", 40_000),
+    mcpMaxImageBytes: integer(env, "MEMORY_MCP_MAX_IMAGE_BYTES", 1024 * 1024),
     webRoot: env.MEMORY_WEB_ROOT || undefined,
   };
 }

@@ -3,6 +3,7 @@ import { api, type VersionResult } from "../api.js";
 import { foldContext, lineDiff, metadataDiff, type DiffLine, type Fold } from "../diffs.js";
 import { formatTime, OP_LABEL } from "../format.js";
 import { ErrorMessage, Link, Loading, useAsync } from "./common.js";
+import { Media } from "./DocumentView.js";
 
 /** Differences between two versions of a document: metadata first, then a unified line diff. */
 export function DiffView({ store, id, from, to }: { store: string; id: number; from: number; to: number }) {
@@ -32,7 +33,14 @@ export function DiffView({ store, id, from, to }: { store: string; id: number; f
         </nav>
       </header>
       <MetadataChanges before={before} after={after} />
-      <LineChanges before={before.content} after={after.content} />
+      {after.content_type !== undefined
+        ? (
+          <div class="media-diff">
+            <figure><figcaption>v{from}</figcaption><Media store={store} id={id} version={from} contentType={after.content_type} label={`v${from}`} /></figure>
+            <figure><figcaption>v{to}</figcaption><Media store={store} id={id} version={to} contentType={after.content_type} label={`v${to}`} /></figure>
+          </div>
+        )
+        : <LineChanges before={before.content} after={after.content} />}
     </article>
   );
 }

@@ -75,6 +75,7 @@ export function DocumentView({ store, id, version, line }: { store: string; id: 
             v{shown.version}{shown.version === latest ? " · current" : ` of ${latest}`}
           </span>
           {deleted && <span class="chip chip-deleted">deleted</span>}
+          {doc.append_only && <span class="chip chip-past" title="Only additions at the end are accepted">append-only</span>}
         </h2>
         {shown.description && <p class="description">{shown.description}</p>}
         <div class="meta">
@@ -85,14 +86,18 @@ export function DocumentView({ store, id, version, line }: { store: string; id: 
           {OP_LABEL[shown.op]} {formatTime(shown.created_at)} by {shown.actor} · {formatSize(shown.size)}
           {shown.change_note && <> · “{shown.change_note}”</>}
         </p>
-        <div class="toggle" role="group" aria-label="Display">
-          <button type="button" aria-pressed={mode.value === "rendered"} onClick={() => (mode.value = "rendered")}>Rendered</button>
-          <button type="button" aria-pressed={mode.value === "raw"} onClick={() => (mode.value = "raw")}>Raw</button>
-        </div>
+        {shown.content_type === undefined && (
+          <div class="toggle" role="group" aria-label="Display">
+            <button type="button" aria-pressed={mode.value === "rendered"} onClick={() => (mode.value = "rendered")}>Rendered</button>
+            <button type="button" aria-pressed={mode.value === "raw"} onClick={() => (mode.value = "raw")}>Raw</button>
+          </div>
+        )}
       </header>
-      {mode.value === "rendered" && line === undefined
-        ? <Rendered store={store} path={shown.path} content={shown.content} />
-        : <Raw content={shown.content} line={line} />}
+      {shown.content_type !== undefined
+        ? <Media store={store} id={id} version={shown.version} contentType={shown.content_type} label={shown.path} />
+        : mode.value === "rendered" && line === undefined
+          ? <Rendered store={store} path={shown.path} content={shown.content} />
+          : <Raw content={shown.content} line={line} />}
     </article>
   );
 }
@@ -109,8 +114,67 @@ function Rendered({ store, path, content }: { store: string; path: string; conte
     };
     return renderMarkdown(content, links);
   }, [store, path, content, docs]);
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Images and videos of the memory need the token: fetched here, shown through object URLs.
+    let current = true;
+    const urls: string[] = [];
+    for (const element of container.current?.querySelectorAll<HTMLImageElement | HTMLVideoElement>("[data-memory-src]") ?? []) {
+      api.file(store, element.dataset.memorySrc!).then(
+        (blob) => {
+          if (!current) return;
+          const url = URL.createObjectURL(blob);
+          urls.push(url);
+          element.src = url;
+        },
+        (error: Error) => {
+          element.classList.add("missing");
+          element.title = `Not loaded: ${error.message}`;
+        },
+      );
+    }
+    return () => {
+      current = false;
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [store, html]);
   if (content.trim() === "") return <p class="muted">(empty document)</p>;
-  return <div class="markdown" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div class="markdown" ref={container} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+/** One version of a binary document: an image or a video. */
+export function Media({ store, id, version, contentType, label }: {
+  store: string;
+  id: number;
+  version: number;
+  contentType: string;
+  label: string;
+}) {
+  const [url, setUrl] = useState<string | undefined>();
+  const [error, setError] = useState<string | undefined>();
+  useEffect(() => {
+    let current = true;
+    let created: string | undefined;
+    setUrl(undefined);
+    setError(undefined);
+    api.versionFile(store, id, version).then(
+      (blob) => {
+        if (!current) return;
+        created = URL.createObjectURL(blob);
+        setUrl(created);
+      },
+      (e: Error) => current && setError(e.message),
+    );
+    return () => {
+      current = false;
+      if (created) URL.revokeObjectURL(created);
+    };
+  }, [store, id, version]);
+  if (error) return <ErrorMessage message={error} />;
+  if (!url) return <Loading />;
+  return contentType.startsWith("video/")
+    ? <video class="media" controls src={url} title={label} />
+    : <img class="media" src={url} alt={label} />;
 }
 
 function Raw({ content, line }: { content: string; line?: number | undefined }) {

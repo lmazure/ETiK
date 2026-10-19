@@ -41,6 +41,16 @@ export function memoryLinkPath(href: string, fromPath: string): string | undefin
   return path === "/" ? undefined : path;
 }
 
+const MEDIA_KINDS: Record<string, "image" | "video"> = {
+  png: "image", jpg: "image", jpeg: "image", gif: "image", webp: "image", webm: "video",
+};
+
+/** Whether a memory path is an image or a video document, from its extension (the store decides the same way). */
+export function mediaKind(path: string): "image" | "video" | undefined {
+  const match = /\.([a-z0-9]+)$/i.exec(path);
+  return match ? MEDIA_KINDS[match[1]!.toLowerCase()] : undefined;
+}
+
 /** Set by renderMarkdown for the duration of one synchronous parse. */
 let resolveLink: LinkResolver | undefined;
 
@@ -51,7 +61,8 @@ function escapeHtml(text: string): string {
 /**
  * Memory documents may describe the SUT's HTML and may contain text copied from untrusted pages.
  * Raw HTML is therefore never interpreted: it is shown, escaped, exactly as written.
- * External images are not loaded: they become links.
+ * External images are not loaded: they become links. Images and videos of the memory become elements
+ * whose `data-memory-src` is their path; the page loads them with its token (see DocumentView).
  */
 const marked = new Marked({
   gfm: true,
@@ -71,7 +82,14 @@ const marked = new Marked({
       return `<a class="memory-link" href="${escapeHtml(target.href)}" title="${escapeHtml(target.path)}">${text}</a>`;
     },
     image({ href, text }: Tokens.Image): string {
-      return `<a href="${escapeHtml(href)}">[image: ${escapeHtml(text || href)}]</a>`;
+      const target = resolveLink?.(href);
+      const kind = target && mediaKind(target.path);
+      if (!target || !kind) return `<a href="${escapeHtml(href)}">[image: ${escapeHtml(text || href)}]</a>`;
+      const label = escapeHtml(text || target.path);
+      const path = escapeHtml(target.path);
+      if (target.href === undefined) return `<span class="memory-link missing" title="No document at ${path}">[${kind}: ${label}]</span>`;
+      if (kind === "video") return `<video class="memory-media" controls data-memory-src="${path}" title="${label}"></video>`;
+      return `<a class="memory-link" href="${escapeHtml(target.href)}" title="${path}"><img class="memory-media" data-memory-src="${path}" alt="${label}"></a>`;
     },
   },
 });

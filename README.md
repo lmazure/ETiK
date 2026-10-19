@@ -12,12 +12,12 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
 │ SquashTM (SUT)        Memory server         Your browser    │
 │ :8090                 :9501  ◄───────────── web app (read)  │
 │   ▲                     ▲                                   │
-│   │ UI (Playwright CLI) │ MCP (memory_* tools)              │
+│   │ UI (Playwright CLI) │ MCP (memory_* tools), REST upload │
 │ ┌─┴─────────────────────┴───────────────┐                   │
 │ │ Test container (test_environment/)    │ ◄──── console ─── │
 │ │ Claude Code in YOLO mode, firewalled  │ ──────────────────┼──► Anthropic API,
-│ │ session_##/: charter, checklist, log, │                   │    SquashTM docs
-│ │              bug reports, screenshots │                   │
+│ │ Sessions and knowledge go to the      │                   │    SquashTM docs
+│ │ memory server (MCP + uploads)         │                   │
 │ └───────────────────────────────────────┘                   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -27,12 +27,12 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
   - You chat with Claude Code from your browser, in the web terminal of the ETiK console (`http://localhost:7681`).
   - A configuration (`test-configurations/squashtm/`) defines the system prompt, the allowed Internet domains and host ports, the tools and the skills; you upload it from the console.
   - Claude Code drives SquashTM's UI with Playwright CLI, following the Exploratory Testing process in its system prompt (`test-configurations/squashtm/system-prompt.md`).
-  - For each Exploratory Test Session, the agent creates a `test_environment/workspace/session_##/` directory, where it writes the charter, checklist, replay log, bug reports and screenshots.
+  - For each Exploratory Test Session, the agent creates a folder `/sessions/NNN/` in the memory server, where it writes the charter, checklist, replay log (append-only), bug reports and screenshots. The workspace only holds temporary files.
   - A firewall only lets the container reach the Anthropic API, and, while Claude Code runs, the domains and host ports of its configuration: the SquashTM documentation, and, on the host, SquashTM and the memory server.
-- **The memory server** (`memory_server/`) is the agent's durable knowledge about the SUT across Sessions: UI pages, private API endpoints, business rules.
+- **The memory server** (`memory_server/`) holds the agent's durable knowledge about the SUT across Sessions (`/knowledge/`: UI pages, private API endpoints, business rules) and the Sessions themselves (`/sessions/`).
   - It is a separate container, so the agent cannot tamper with its files.
   - It keeps every version of every document and the change note of each change; the agent starts each change note with its Session.
-  - The agent reaches it through MCP (`memory_*` tools), with a token limited to its own store.
+  - The agent reaches it through MCP (`memory_*` tools), and uploads screenshots through its REST API (`memory-upload` skill), with a token limited to its own store.
   - You watch it live in a read-only web app.
 
 ## Usage example
@@ -75,6 +75,10 @@ See `memory_server/README.md` for the server and the web app, and `memory_server
 4. Select the configuration and click **Start Claude Code**.
    - The console opens the firewall to the configuration's domains and host ports, checks the memory server and the token, then starts Claude Code in the web terminal.
    - The first time, log in with your Claude subscription and accept the prompts; the login is kept in a Docker volume.
-5. Give Claude Code an Exploratory Test Charter (or let it ask you for one), and follow the Session: it creates the next `workspace/session_##/` directory, proposes a charter, builds a checklist, tests, writes bug reports into `workspace/session_##/`, and records what it learns about SquashTM in the memory server.
+5. Give Claude Code an Exploratory Test Charter (or let it ask you for one), and follow the Session in the memory web app: it creates the next `/sessions/NNN/` folder, proposes a charter, builds a checklist, tests, writes bug reports into `/sessions/NNN/bugs/`, and records what it learns about SquashTM in `/knowledge/`.
 
 See `test_environment/README.md` for more details.
+
+### 4) Publish a bug in GitLab
+
+From this repository, on the host, ask Claude Code to publish a bug (e.g. "publish /sessions/042/bugs/007/bug.md in GitLab"): the `report-bug` skill (`.claude/skills/report-bug/`) reads the bug report and its screenshots from the memory server. It needs `GITLAB_TOKEN` and `MEMORY_TOKEN` (the viewer token is enough) in the environment.

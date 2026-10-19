@@ -4,7 +4,7 @@ import type { FastifyBaseLogger, FastifyInstance, FastifyReply } from "fastify";
 import { AuthError, STORE_HEADER, headerValue, type Authenticator } from "../auth.js";
 import { MemoryError } from "../core/errors.js";
 import type { Context, MemoryCore } from "../core/memory-core.js";
-import { tools, type ToolName } from "../schemas.js";
+import { tools, type ReadArgs, type ToolName } from "../schemas.js";
 import {
   formatBatch, formatDelete, formatError, formatHistory, formatList, formatMove, formatRead, formatSearch, formatWrite,
 } from "./format.js";
@@ -12,11 +12,20 @@ import {
 export const SERVER_NAME = "memory-server";
 export const SERVER_VERSION = "0.1.0";
 
-type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
+type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+type ToolResult = { content: Content[]; isError?: boolean };
 
-function run(logger: FastifyBaseLogger, produce: () => string): ToolResult {
+export interface McpLimits {
+  /** Maximum size of one text result, in characters. */
+  maxOutputChars: number;
+  /** Largest image returned by memory_read, in bytes. */
+  maxImageBytes: number;
+}
+
+function run(logger: FastifyBaseLogger, produce: () => string | Content[]): ToolResult {
   try {
-    return { content: [{ type: "text", text: produce() }] };
+    const output = produce();
+    return { content: typeof output === "string" ? [{ type: "text", text: output }] : output };
   } catch (error) {
     if (!(error instanceof MemoryError)) logger.error(error);
     return { content: [{ type: "text", text: formatError(error) }], isError: true };
@@ -37,13 +46,29 @@ function meta(name: ToolName) {
   };
 }
 
+/** memory_read: the numbered lines of a text document; the metadata of a binary one, followed by the image when small enough. */
+function read(core: MemoryCore, ctx: Context, args: ReadArgs, limits: McpLimits): string | Content[] {
+  const result = core.read(ctx, args);
+  if (result.content_type === undefined) return formatRead(result, limits.maxOutputChars);
+  const download = `download it with GET /api/stores/${ctx.store}/files${result.path}` + (result.is_past_version ? `?version=${result.version}` : "");
+  if (!result.content_type.startsWith("image/")) return formatRead(result, limits.maxOutputChars, `(not shown: only images are returned; ${download})`);
+  if (result.size > limits.maxImageBytes) {
+    return formatRead(result, limits.maxOutputChars, `(not shown: larger than the ${limits.maxImageBytes} bytes limit for images; ${download})`);
+  }
+  const file = core.readFile(ctx, { path: result.path, version: result.version });
+  return [
+    { type: "text", text: formatRead(result, limits.maxOutputChars) },
+    { type: "image", data: file.data.toString("base64"), mimeType: file.content_type },
+  ];
+}
+
 /** One MCP server per request: the store comes from that request's headers. */
-export function buildMcpServer(core: MemoryCore, ctx: Context, maxOutputChars: number, logger: FastifyBaseLogger): McpServer {
+export function buildMcpServer(core: MemoryCore, ctx: Context, limits: McpLimits, logger: FastifyBaseLogger): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
   server.registerTool("memory_list", { ...meta("memory_list"), inputSchema: tools.memory_list.schema },
     async (args) => run(logger, () => formatList(core.list(ctx, args))));
   server.registerTool("memory_read", { ...meta("memory_read"), inputSchema: tools.memory_read.schema },
-    async (args) => run(logger, () => formatRead(core.read(ctx, args), maxOutputChars)));
+    async (args) => run(logger, () => read(core, ctx, args, limits)));
   server.registerTool("memory_search", { ...meta("memory_search"), inputSchema: tools.memory_search.schema },
     async (args) => run(logger, () => formatSearch(core.search(ctx, args))));
   server.registerTool("memory_write", { ...meta("memory_write"), inputSchema: tools.memory_write.schema },
@@ -66,7 +91,7 @@ function jsonRpcError(reply: FastifyReply, status: number, message: string) {
 }
 
 /** Mounts the stateless Streamable HTTP endpoint on `/mcp`. Authentication happens before any MCP processing. */
-export function registerMcp(app: FastifyInstance, core: MemoryCore, auth: Authenticator, maxOutputChars: number): void {
+export function registerMcp(app: FastifyInstance, core: MemoryCore, auth: Authenticator, limits: McpLimits): void {
   app.post("/mcp", async (request, reply) => {
     let ctx: Context;
     try {
@@ -81,7 +106,7 @@ export function registerMcp(app: FastifyInstance, core: MemoryCore, auth: Authen
       if (error instanceof MemoryError) return jsonRpcError(reply, 400, error.message);
       throw error;
     }
-    const server = buildMcpServer(core, ctx, maxOutputChars, request.log);
+    const server = buildMcpServer(core, ctx, limits, request.log);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     reply.hijack();
     reply.raw.on("close", () => {

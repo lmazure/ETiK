@@ -8,6 +8,7 @@ import type { DB } from "./db.js";
 import { applyEdits, changedLines, normalizeTags, sameState, type ChangedLines, type DocState } from "./edits.js";
 import { MemoryError } from "./errors.js";
 import { enclosingHeading, normalizeNewlines, parseHeadings, requireSection, toLines } from "./markdown.js";
+import { checkMedia, decodeBase64, mediaTypeOf } from "./media.js";
 import { ROOT, ancestorsOf, normalizeDocPath, normalizeFolderPath, rebase } from "./paths.js";
 import { Repository, type Change, type Doc, type DocInfo, type DocSummary, type VersionOp } from "./repository.js";
 
@@ -17,10 +18,14 @@ export type { Change, ChangeItem, DocInfo, VersionOp } from "./repository.js";
 export interface Context {
   store: string;
   actor: string;
+  /** True for the admin token, which may also move and delete append-only documents. */
+  admin?: boolean;
 }
 
 export interface CoreOptions {
   maxDocumentBytes: number;
+  /** Maximum size of a binary document, in bytes. */
+  maxFileBytes: number;
 }
 
 export interface FolderEntry {
@@ -38,6 +43,8 @@ export interface DocumentEntry {
   updated_at: string;
   tags: string[];
   description: string;
+  append_only: boolean;
+  content_type?: string;
 }
 
 export interface ListResult {
@@ -56,11 +63,34 @@ export interface ReadResult {
   tags: string[];
   metadata: Record<string, string>;
   updated_at: string;
+  append_only: boolean;
+  /** Media type of a binary document, which has no lines; absent for a text document. */
+  content_type?: string;
+  size: number;
   total_lines: number;
   from: number;
   to: number;
   section?: string;
   lines: string[];
+}
+
+/** The bytes of one version of a binary document. */
+export interface FileResult {
+  path: string;
+  version: number;
+  current_version: number;
+  content_type: string;
+  data: Buffer;
+}
+
+/** Arguments of a binary write coming as raw bytes (REST); the other fields are those of memory_write. */
+export type FileWriteArgs = Omit<WriteArgs, "file_text" | "encoding"> & { data: Buffer; content_type?: string | undefined };
+
+/** Content of a write: text, or the bytes of a binary document with the type its sender declared. */
+interface Content {
+  text: string;
+  data?: Buffer;
+  declaredType?: string | undefined;
 }
 
 export interface SearchHit {
@@ -147,6 +177,8 @@ export interface VersionResult {
   created_at: string;
   actor: string;
   change_note: string | null;
+  append_only: boolean;
+  content_type?: string;
 }
 
 export interface RestoreResult {
@@ -179,7 +211,7 @@ export function formatZodError(error: z.ZodError): string {
 }
 
 function stateOf(doc: Doc): DocState {
-  return { text: doc.content, description: doc.description, tags: doc.tags, metadata: doc.metadata };
+  return { text: doc.content, data: doc.data, description: doc.description, tags: doc.tags, metadata: doc.metadata };
 }
 
 function hasAllTags(doc: DocSummary, tags: string[] | undefined): boolean {
@@ -230,7 +262,8 @@ export class MemoryCore {
       if (relative.length <= args.depth) {
         entries.push({
           type: "document", id: doc.id, path: doc.path, version: doc.version, size: doc.size,
-          updated_at: doc.updated_at, tags: doc.tags, description: doc.description,
+          updated_at: doc.updated_at, tags: doc.tags, description: doc.description, append_only: doc.append_only,
+          ...(doc.content_type !== undefined && { content_type: doc.content_type }),
         });
       }
     }
@@ -248,7 +281,11 @@ export class MemoryCore {
     if (args.section !== undefined && args.view_range !== undefined) {
       throw new MemoryError("INVALID_ARGUMENT", "Give either section or view_range, not both");
     }
-    let state = { ...stateOf(doc), version: doc.version, updated_at: doc.updated_at };
+    if (doc.content_type !== undefined && (args.section !== undefined || args.view_range !== undefined)) {
+      throw new MemoryError("INVALID_ARGUMENT", `${path} is a binary document (${doc.content_type}): it has no sections nor lines`,
+        { path, content_type: doc.content_type });
+    }
+    let state = { ...stateOf(doc), version: doc.version, updated_at: doc.updated_at, size: doc.size };
     if (args.version !== undefined && args.version !== doc.version) {
       const past = this.repo.getVersion(doc.id, args.version);
       if (!past) {
@@ -257,7 +294,7 @@ export class MemoryCore {
       }
       state = {
         text: past.content, description: past.description, tags: past.tags, metadata: past.metadata,
-        version: past.version, updated_at: past.created_at,
+        version: past.version, updated_at: past.created_at, size: past.size,
       };
     }
     const lines = toLines(state.text);
@@ -283,9 +320,32 @@ export class MemoryCore {
     return {
       path, version: state.version, current_version: doc.version, is_past_version: state.version !== doc.version,
       description: state.description, tags: state.tags, metadata: state.metadata, updated_at: state.updated_at,
+      append_only: doc.append_only, ...(doc.content_type !== undefined && { content_type: doc.content_type }), size: state.size,
       total_lines: lines.length, from, to, lines: lines.slice(from - 1, to),
       ...(args.section !== undefined && { section: args.section.trim() }),
     };
+  }
+
+  /** The bytes of a binary document, current or past version. */
+  readFile(ctx: Context, args: { path: string; version?: number | undefined }): FileResult {
+    validateStoreName(ctx.store);
+    const path = normalizeDocPath(args.path);
+    const doc = this.requireDoc(ctx.store, path);
+    if (doc.content_type === undefined) {
+      throw new MemoryError("INVALID_ARGUMENT", `${path} is a text document, not a binary one; read it with memory_read`, { path });
+    }
+    let version = doc.version;
+    let data = doc.data;
+    if (args.version !== undefined && args.version !== doc.version) {
+      const past = this.repo.getVersion(doc.id, args.version);
+      if (!past) {
+        throw new MemoryError("NOT_FOUND", `Version ${args.version} of ${path} does not exist; current version is ${doc.version}`,
+          { path, version: args.version, current_version: doc.version });
+      }
+      version = past.version;
+      data = past.data;
+    }
+    return { path, version, current_version: doc.version, content_type: doc.content_type, data: data ?? Buffer.alloc(0) };
   }
 
   search(ctx: Context, args: SearchArgs): SearchResult {
@@ -355,14 +415,42 @@ export class MemoryCore {
       throw new MemoryError("NOT_FOUND", `Version ${args.version} of ${doc.path} does not exist; current version is ${doc.version}`,
         { doc_id: doc.id, version: args.version, current_version: doc.version });
     }
-    const { changeset_id: _changeset, ...rest } = version;
-    return { ...rest, current_version: doc.version, deleted: doc.deleted };
+    const { changeset_id: _changeset, data: _data, ...rest } = version;
+    return {
+      ...rest, current_version: doc.version, deleted: doc.deleted, append_only: doc.append_only,
+      ...(doc.content_type !== undefined && { content_type: doc.content_type }),
+    };
+  }
+
+  /** The bytes of one version of a binary document by id, live or deleted. */
+  fileById(ctx: Context, args: DocVersionArgs): FileResult {
+    const doc = this.documentById(ctx, args.doc_id);
+    if (doc.content_type === undefined) {
+      throw new MemoryError("INVALID_ARGUMENT", `Document ${doc.id} (${doc.path}) is a text document, not a binary one`, { doc_id: doc.id });
+    }
+    const version = this.repo.getVersion(doc.id, args.version);
+    if (!version) {
+      throw new MemoryError("NOT_FOUND", `Version ${args.version} of ${doc.path} does not exist; current version is ${doc.version}`,
+        { doc_id: doc.id, version: args.version, current_version: doc.version });
+    }
+    return {
+      path: version.path, version: version.version, current_version: doc.version, content_type: doc.content_type,
+      data: version.data ?? Buffer.alloc(0),
+    };
   }
 
   // ---------------------------------------------------------------- writes
 
   write(ctx: Context, args: WriteArgs): WriteResult {
     return this.inTransaction(ctx, args.change_note, (tx) => this.doWrite(tx, args));
+  }
+
+  /** memory_write with the bytes of a binary document given as is (REST). */
+  writeFile(ctx: Context, args: FileWriteArgs): WriteResult {
+    return this.inTransaction(ctx, args.change_note, (tx) => {
+      const { data, content_type, ...rest } = args;
+      return this.doPut(tx, normalizeDocPath(args.path), { text: "", data, declaredType: content_type }, rest);
+    });
   }
 
   edit(ctx: Context, args: EditArgs): WriteResult {
@@ -419,7 +507,8 @@ export class MemoryCore {
       this.checkPlacement(store, target);
       const version = deleted.version + 1;
       this.appendVersion(tx, deleted.doc_id, version, "restore", target,
-        { text: source.content, description: source.description, tags: source.tags, metadata: source.metadata }, undefined);
+        { text: source.content, data: source.data, description: source.description, tags: source.tags, metadata: source.metadata },
+        undefined);
       return { doc_id: deleted.doc_id, path: target, version, restored_from_version: sourceVersion };
     });
   }
@@ -449,7 +538,7 @@ export class MemoryCore {
   private appendVersion(tx: Tx, docId: number, version: number, op: VersionOp, path: string, state: DocState,
                         changeNote: string | undefined): void {
     this.repo.appendVersion({
-      docId, version, changesetId: tx.changesetId(), op, path, content: state.text,
+      docId, version, changesetId: tx.changesetId(), op, path, content: state.text, data: state.data,
       description: state.description, tags: state.tags, metadata: state.metadata,
       changeNote: changeNote ?? tx.changeNote, now: tx.now,
     });
@@ -497,6 +586,33 @@ export class MemoryCore {
     }
   }
 
+  private checkFileSize(path: string, size: number): void {
+    if (size > this.options.maxFileBytes) {
+      throw new MemoryError("TOO_LARGE", `${path} would be ${size} bytes; the limit for a binary document is ${this.options.maxFileBytes} bytes`,
+        { path, size, limit: this.options.maxFileBytes });
+    }
+  }
+
+  /** The new text of an append-only document must start with its current text. */
+  private checkAppendOnly(doc: Doc, text: string): void {
+    if (doc.append_only && !text.startsWith(doc.content)) {
+      throw new MemoryError("APPEND_ONLY",
+        `${doc.path} is append-only: only additions at its end are accepted; add text with memory_edit op 'append' without section`,
+        { path: doc.path });
+    }
+  }
+
+  /** Only the admin may move, replace or delete append-only documents. */
+  private checkRemovable(tx: Tx, docs: DocSummary[], action: string): void {
+    if (tx.ctx.admin) return;
+    const paths = docs.filter((d) => d.append_only).map((d) => d.path);
+    if (paths.length > 0) {
+      throw new MemoryError("APPEND_ONLY",
+        `Cannot ${action} append-only ${paths.length === 1 ? "document" : "documents"} ${paths.slice(0, 10).join(", ")}${paths.length > 10 ? ", …" : ""}; only the admin can`,
+        { paths });
+    }
+  }
+
   /** A document cannot be a folder, nor be below another document. Documents in `ignore` are about to move away. */
   private checkPlacement(store: string, path: string, ignore: Set<number> = new Set()): void {
     const below = this.repo.listLiveDocs(store, path).filter((d) => !ignore.has(d.id));
@@ -513,10 +629,33 @@ export class MemoryCore {
   }
 
   private doWrite(tx: Tx, args: WriteArgs): WriteResult {
-    const store = tx.ctx.store;
     const path = normalizeDocPath(args.path);
-    const text = normalizeNewlines(args.file_text);
-    this.checkSize(path, text);
+    const { file_text, encoding, ...rest } = args;
+    const content: Content = encoding === "base64"
+      ? { text: "", data: decodeBase64(path, file_text) }
+      : { text: normalizeNewlines(file_text) };
+    return this.doPut(tx, path, content, rest);
+  }
+
+  /** Creates or overwrites a text or binary document; whether it is binary depends on its extension. */
+  private doPut(tx: Tx, path: string, content: Content, args: Omit<WriteArgs, "file_text" | "encoding">): WriteResult {
+    const store = tx.ctx.store;
+    const { text, data } = content;
+    let contentType: string | undefined;
+    if (data !== undefined) {
+      contentType = checkMedia(path, data, content.declaredType);
+      this.checkFileSize(path, data.length);
+      if (args.append_only) {
+        throw new MemoryError("INVALID_ARGUMENT", `append_only applies to text documents; ${path} is a binary document`, { path });
+      }
+    } else {
+      const mediaType = mediaTypeOf(path);
+      if (mediaType !== undefined) {
+        throw new MemoryError("INVALID_ARGUMENT",
+          `${path} is a binary document path (${mediaType}): write its bytes in base64 with encoding 'base64'`, { path });
+      }
+      this.checkSize(path, text);
+    }
     const existing = this.repo.getLiveDoc(store, path);
     if (args.mode === "create") {
       if (args.if_version !== undefined) {
@@ -528,22 +667,31 @@ export class MemoryCore {
       }
       this.checkPlacement(store, path);
       tx.changesetId(); // creates the store row before the document row refers to it
-      const docId = this.repo.insertDocument(store, path, tx.now);
+      const docId = this.repo.insertDocument(store, path, tx.now, args.append_only ?? false, contentType);
       this.appendVersion(tx, docId, 1, "create", path, {
-        text, description: args.description ?? "", tags: normalizeTags(args.tags ?? []), metadata: args.metadata ?? {},
+        text, data, description: args.description ?? "", tags: normalizeTags(args.tags ?? []), metadata: args.metadata ?? {},
       }, args.change_note);
       return { path, version: 1, created: true };
     }
+    if (args.append_only !== undefined) {
+      throw new MemoryError("INVALID_ARGUMENT", "append_only can only be given when creating a document (mode 'create')");
+    }
     if (!existing) this.requireDoc(store, path);
     const doc = existing!;
+    if (doc.content_type !== contentType) {
+      throw new MemoryError("INVALID_ARGUMENT", `${path} is a ${doc.content_type ?? "text"} document; it cannot be replaced by ${contentType ?? "text"}`,
+        { path });
+    }
     this.checkVersion(doc, args.if_version);
     const next: DocState = {
       text,
+      data,
       description: args.description ?? doc.description,
       tags: args.tags ? normalizeTags(args.tags) : doc.tags,
       metadata: args.metadata ?? doc.metadata,
     };
     if (sameState(stateOf(doc), next)) return { path, version: doc.version, unchanged: true };
+    this.checkAppendOnly(doc, next.text);
     this.appendVersion(tx, doc.id, doc.version + 1, "overwrite", path, next, args.change_note);
     return { path, version: doc.version + 1 };
   }
@@ -552,10 +700,16 @@ export class MemoryCore {
     const path = normalizeDocPath(args.path);
     const doc = this.requireDoc(tx.ctx.store, path);
     this.checkVersion(doc, args.if_version);
+    if (doc.content_type !== undefined && args.operations.some((op) => op.op !== "set_metadata")) {
+      throw new MemoryError("INVALID_ARGUMENT",
+        `${path} is a binary document (${doc.content_type}): only set_metadata applies; replace its content with memory_write`,
+        { path, content_type: doc.content_type });
+    }
     const before = stateOf(doc);
     const after = applyEdits(before, args.operations, path);
     this.checkSize(path, after.text);
     if (sameState(before, after)) return { path, version: doc.version, unchanged: true };
+    this.checkAppendOnly(doc, after.text);
     this.appendVersion(tx, doc.id, doc.version + 1, "edit", path, after, args.change_note);
     const changed = changedLines(before.text, after.text);
     return { path, version: doc.version + 1, ...(changed && { changed }) };
@@ -575,8 +729,14 @@ export class MemoryCore {
 
     const doc = this.repo.getLiveDoc(store, from);
     if (doc) {
+      if (mediaTypeOf(to) !== doc.content_type) {
+        throw new MemoryError("INVALID_ARGUMENT",
+          `${from} is a ${doc.content_type ?? "text"} document; ${to} would make it ${mediaTypeOf(to) ?? "text"}: keep the kind of extension`,
+          { path: from, new_path: to });
+      }
       const replaced: string[] = [];
       const target = this.repo.getLiveDoc(store, to);
+      this.checkRemovable(tx, target ? [doc, target] : [doc], "move or replace");
       if (target) {
         if (!args.overwrite) {
           throw new MemoryError("ALREADY_EXISTS", `Path exists: ${to}; set overwrite to replace it`, { path: to });
@@ -611,6 +771,7 @@ export class MemoryCore {
         `${paths.length} target paths exist (${paths.slice(0, 10).join(", ")}${paths.length > 10 ? ", …" : ""}); set overwrite to replace them`,
         { paths });
     }
+    this.checkRemovable(tx, [...docs, ...conflicts], "move or replace");
     const replaced = conflicts.map((d) => this.softDelete(tx, d, args.change_note).path);
     for (const p of plan) this.checkPlacement(store, p.target, moving);
     // Park first so that no move collides with a document that has not moved yet.
@@ -629,6 +790,7 @@ export class MemoryCore {
     const doc = this.repo.getLiveDoc(store, path);
     if (doc) {
       this.checkVersion(doc, args.if_version);
+      this.checkRemovable(tx, [doc], "delete");
       return { deleted: [this.softDelete(tx, doc, args.change_note)] };
     }
     const docs = this.repo.listLiveDocsWithContent(store, path);
@@ -640,6 +802,7 @@ export class MemoryCore {
     if (args.if_version !== undefined) {
       throw new MemoryError("INVALID_ARGUMENT", "if_version applies to a document, not to a folder");
     }
+    this.checkRemovable(tx, docs, "delete");
     return { deleted: docs.map((d) => this.softDelete(tx, d, args.change_note)) };
   }
 

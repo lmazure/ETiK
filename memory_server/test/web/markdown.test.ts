@@ -68,6 +68,25 @@ describe("markdown rendering", () => {
     expect(missing?.getAttribute("title")).toBe("No document at /entities/campaign.md");
   });
 
+  it("turns images and videos of the memory into elements the page loads, never with a src", () => {
+    const existing = new Map([["/s/042/log/login.png", "#/s/squashtm/doc/8"], ["/s/042/log/run.webm", "#/s/squashtm/doc/9"]]);
+    const links: LinkResolver = (href) => {
+      const path = memoryLinkPath(href, "/s/042/log/log.md");
+      return path === undefined ? undefined : { path, href: existing.get(path) };
+    };
+    const html = render("![Login page](login.png)\n\n![run](run.webm)\n\n![gone](gone.png)\n\n![doc](notes.md)\n", links);
+    const img = html.querySelector("a.memory-link > img.memory-media");
+    expect(img?.getAttribute("data-memory-src")).toBe("/s/042/log/login.png");
+    expect(img?.getAttribute("alt")).toBe("Login page");
+    expect(img?.getAttribute("src")).toBeNull();
+    expect(img?.parentElement?.getAttribute("href")).toBe("#/s/squashtm/doc/8");
+    const video = html.querySelector("video.memory-media");
+    expect(video?.getAttribute("data-memory-src")).toBe("/s/042/log/run.webm");
+    expect(video?.hasAttribute("controls")).toBe(true);
+    expect(html.querySelector("span.memory-link.missing")?.textContent).toBe("[image: gone]");
+    expect([...html.querySelectorAll("a")].at(-1)?.textContent).toBe("[image: doc]");
+  });
+
   it("treats every link as external without a resolver", () => {
     const html = render("[requirement](/entities/requirement.md)\n");
     expect(html.querySelector("a")?.getAttribute("target")).toBe("_blank");

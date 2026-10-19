@@ -28,6 +28,8 @@ One container exposes the same core through:
 - **Store**: an independent set of documents, e.g. one per system under test. Chosen by the `X-Memory-Store` header.
 - **Path**: absolute, `/`-separated, case-sensitive, e.g. `/entities/requirement.md`. No empty, `.` or `..` segment. Folders exist implicitly; a path cannot be both a document and a folder.
 - **Document**: UTF-8 text (Markdown expected, not enforced; line endings normalized to `\n`) plus optional metadata: `description` (one line), `tags` (strings), `metadata` (free string-to-string map). Metadata is never mixed into the text.
+- **Binary document**: an image or a video (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.webm`, decided by the extension), e.g. a screenshot referenced from a Markdown document. Same metadata, versions and history; no lines. See [`API.md`](API.md#binary-documents).
+- **Append-only document**: created with `append_only`, it only accepts additions at its end, and agents cannot move or delete it, e.g. a test log. See [`API.md`](API.md#append-only-documents).
 - **Version**: an integer per document, starting at 1 and growing by one on every change (content, metadata, move, delete, restore). Every read and write returns it. Writes accept `if_version`: on mismatch the call fails and changes nothing. A call that changes nothing creates no version.
 - **Section**: an exact Markdown heading line, e.g. `## UI pages`. It runs until the next heading of the same or higher level; headings inside fenced code blocks are ignored. A heading occurring twice makes the call fail with the line numbers.
 - **Change note**: every write accepts an optional `change_note` (like a commit message), kept in the history together with the token that made the change.
@@ -38,9 +40,9 @@ One container exposes the same core through:
 | Tool | Purpose |
 | --- | --- |
 | `memory_list` | List folders and documents under a path, to a depth, with version, size, date, tags and description, without reading content. Filter by tags; paginated. |
-| `memory_read` | Read a document whole, one `section`, or a `view_range`; returns numbered lines, metadata and version. `version` reads a past version. |
+| `memory_read` | Read a document whole, one `section`, or a `view_range`; returns numbered lines, metadata and version. `version` reads a past version. An image is returned as an image. |
 | `memory_search` | Search document content: `keyword` (case-insensitive literal) or `regex`; filters on `path_prefix` (a folder or a document), tags and metadata. Returns path, line, enclosing section, snippet, score. `semantic` and `hybrid` are rejected for now. |
-| `memory_write` | `create` a document (fails if it exists) or `overwrite` it (fails if it does not), with optional metadata. |
+| `memory_write` | `create` a document (fails if it exists) or `overwrite` it (fails if it does not), with optional metadata; `append_only` at creation; `encoding: "base64"` for a binary document. |
 | `memory_edit` | Apply operations to one document, in order, all or nothing: `str_replace` (unique unless `replace_all`), `append` / `prepend` (whole document or a `section`, optionally `create_section`), `insert` (after a line), `replace_section`, `set_metadata` (merge; `null` removes a key). |
 | `memory_move` | Rename or move a document or a folder; `overwrite` to replace an existing target. |
 | `memory_delete` | Delete a document, or a folder with `recursive`. The root cannot be deleted. Deletion is soft (see below). |
@@ -77,8 +79,8 @@ To try the tools interactively, run `npx @modelcontextprotocol/inspector@latest`
 
 | Tool | Result |
 | --- | --- |
-| `memory_list` | One line per entry: `path · version · size · updated · [tags] · description`; folders as `path/ · N documents`; a `next_offset` when truncated |
-| `memory_read` | Header (path, version, metadata, line range), then `line_number<TAB>text`; a truncation notice telling which `view_range` to read next |
+| `memory_list` | One line per entry: `path · version · size · updated · [media type] · [append-only] · [tags] · description`; folders as `path/ · N documents`; a `next_offset` when truncated |
+| `memory_read` | Header (path, version, metadata, line range), then `line_number<TAB>text`; a truncation notice telling which `view_range` to read next. For a binary document: the header, then the image itself when it is an image under the size limit |
 | `memory_search` | One block per hit: `path:line · section · score`, then the snippet |
 | Write tools | `OK path version=N`; for edits, the changed lines with their numbers so the model can check the result |
 
@@ -88,9 +90,9 @@ Typical errors: `old_str found 2 times (lines 12, 40); make it unique or set rep
 
 Nothing is ever overwritten or deleted:
 
-- `versions` holds a full snapshot (content, description, tags, metadata, path) for every version of every document. It is append-only, enforced by SQLite triggers.
+- `versions` holds a full snapshot (content or bytes, description, tags, metadata, path) for every version of every document. It is append-only, enforced by SQLite triggers. An append-only document also gets a full snapshot per addition: a log of 50 KB on average appended 300 times takes about 15 MB.
 - `changesets` records, for each tool call or batch, the actor (token) and the change note.
-- `documents` is the only mutable table: it points to the head version of each document and keeps a stable id across moves.
+- `documents` is the only mutable table: it points to the head version of each document and keeps a stable id across moves. It also holds what is fixed at creation: the append-only flag and the media type of a binary document.
 
 Deleting is a soft delete: the document leaves listings and its path is free again, but all its versions stay; the admin can restore it.
 
@@ -103,7 +105,8 @@ The agent may run with full shell access (e.g. Claude Code in YOLO mode in the t
 - The store comes from the harness configuration (`X-Memory-Store` header or REST URL), never from tool arguments; the core writes the actor into the history.
 - History and soft delete are the undo for a wrong deletion. Volume backups stay out of the agent's reach.
 - The memory host port must be allowed by the test container's firewall: `hostPorts` of the configuration.
-- The web app shows content written by an agent that browses untrusted pages: HTML found in a memory is displayed as escaped text, never interpreted; a strict Content-Security-Policy forbids inline scripts and external resources.
+- The web app shows content written by an agent that browses untrusted pages: HTML found in a memory is displayed as escaped text, never interpreted; a strict Content-Security-Policy forbids inline scripts and external resources. Binary documents are limited to image and video types whose content is checked, and are served with `X-Content-Type-Options: nosniff`: no SVG or HTML can be stored and run from the app's origin.
+- Append-only documents protect a log against an agent's mistakes (rewriting, deleting); the admin token keeps full control.
 
 ## Run
 
@@ -122,8 +125,10 @@ Data is kept in the `memory-data` volume (`/data/memory.db`, SQLite).
 | `MEMORY_AGENT_TOKENS` | — | `store=token,store=token`; an agent token reaches only its store(s) |
 | `MEMORY_DB_PATH` | `/data/memory.db` in the image | SQLite file |
 | `PORT` / `HOST` | `9501` / `0.0.0.0` | Listening address |
-| `MEMORY_MAX_DOCUMENT_BYTES` | `1048576` | Maximum size of one document |
+| `MEMORY_MAX_DOCUMENT_BYTES` | `1048576` | Maximum size of one text document |
+| `MEMORY_MAX_FILE_BYTES` | `10485760` | Maximum size of one binary document |
 | `MEMORY_MCP_MAX_OUTPUT_CHARS` | `40000` | MCP read results beyond this are truncated with a notice |
+| `MEMORY_MCP_MAX_IMAGE_BYTES` | `1048576` | Largest image `memory_read` returns as an image; bigger ones are only described |
 | `MEMORY_WEB_ROOT` | `dist/web` next to the server | Built web app; not served when absent |
 | `LOG_LEVEL` | `info` | Fastify log level |
 
@@ -154,6 +159,11 @@ curl "${H[@]}" "$B/docs/entities/requirement.md?section=%23%23%20UI%20pages"
 curl "${H[@]}" -X PATCH -H 'If-Match: "1"' $B/docs/entities/requirement.md \
   -d '{"operations":[{"op":"append","section":"## UI pages","text":"- Page URL: /req"}]}'
 
+# upload a screenshot (raw bytes), then download it
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: image/png' -H 'If-None-Match: *' \
+  --data-binary @login.png $B/files/sessions/042/log/login.png
+curl -H "Authorization: Bearer $TOKEN" -o login.png $B/files/sessions/042/log/login.png
+
 curl "${H[@]}" "$B/list?path=/&depth=2"
 curl "${H[@]}" -X POST $B/search -d '{"query":"assumed"}'
 curl "${H[@]}" $B/history/entities/requirement.md
@@ -166,10 +176,11 @@ Each tool has a REST equivalent, and REST adds the store list, the change feed, 
 Open `http://localhost:9501/` and paste the viewer token (it stays in the tab, or in the browser if you tick "Remember").
 
 - **Documents** (left): the folder tree with each document's description; filter by path, description or tag. Deleted documents are listed apart, their history stays readable.
-- **Document** (center): one version, rendered Markdown or raw numbered lines, with its metadata and who changed it (actor, change note).
+- **Document** (center): one version, rendered Markdown or raw numbered lines, with its metadata and who changed it (actor, change note); an image or a video for a binary document.
   A link to another memory document, absolute (`/entities/requirement.md`) or relative to the document (`requirement.md`, `../business-rules.md`), opens it in the app; a link to a document that does not exist is greyed out; any other link opens in a new tab.
+  An image or video of the memory (`![Login page](login.png)`) is shown in place; an external image stays a link and is never loaded.
 - **History** (right): every version of the open document; open any version, diff it with the previous one, or tick two versions and compare them.
-- **Diff**: path, description, tags and metadata changes, then a line diff with folded unchanged parts.
+- **Diff**: path, description, tags and metadata changes, then a line diff with folded unchanged parts (the two images side by side for a binary document).
 - **Activity** (left tab): the store's changes, newest first, one entry per write call or batch; a click opens the diff introduced.
 - **Search** (top): keyword search; a hit opens the document at the matching line.
 
@@ -187,7 +198,8 @@ The test container (`../test_environment/`) uses the store `squashtm`, through t
 
 - `config.json` registers `/mcp` for Claude Code (`tools.mcpServers`), with the store set in the configuration (`"X-Memory-Store": "squashtm"`), and the agent token taken from the environment (`MEMORY_AGENT_TOKEN`; `MEMORY_URL` defaults to `http://host.docker.internal:9501`).
 - The container reads the token from `memory.env`. Before starting Claude Code, the ETiK console checks that the server answers and that the token reaches the store (`checks`).
-- The server knows nothing about Exploratory Test Sessions: the squashtm instructions make the agent start each `change_note` with the name of its Session (e.g. `session_03: Requirement creation page observed`), so the history still tells which Session changed what.
+- The server knows nothing about Exploratory Test Sessions: the squashtm instructions put the knowledge under `/knowledge/` and each Session under `/sessions/NNN/` (charter, checklist, an append-only log, bug reports, screenshots), and make the agent start each `change_note` with the name of its Session (e.g. `session_042: Requirement creation page observed`), so the history still tells which Session changed what.
+- Screenshots go through the REST API (`PUT /files/...`), sent by the configuration's `memory-upload` skill with the agent token, so their bytes do not go through the model.
 - `hostPorts` allows the memory server's host port in the container's firewall.
 - `files/knowledge/INSTRUCTIONS.md` is the policy (documents, entity schema, source tags, capture and consolidation) expressed with the tools. There is no index document: `memory_list` returns each document's description.
 

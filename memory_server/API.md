@@ -63,6 +63,20 @@ Violations give `INVALID_PATH` (or `IS_FOLDER` when the path is an existing fold
 - Maximum size: `MEMORY_MAX_DOCUMENT_BYTES` (default 1 MiB) of UTF-8 content; beyond it, `TOO_LARGE`.
 - `size` in results is in bytes; dates are ISO 8601 UTC strings.
 
+### Binary documents
+
+- A document whose path ends with one of these extensions (case-insensitive) is binary: `.png` (`image/png`), `.jpg` and `.jpeg` (`image/jpeg`), `.gif` (`image/gif`), `.webp` (`image/webp`), `.webm` (`video/webm`). Its media type is fixed at creation. Other types, SVG and HTML among them, are refused: the web app would run their scripts.
+- The content must match the extension (file signature checked), otherwise `INVALID_ARGUMENT`. A text write to a binary path, or a binary write to another path, is refused with `INVALID_ARGUMENT`.
+- Maximum size: `MEMORY_MAX_FILE_BYTES` (default 10 MiB); beyond it, `TOO_LARGE`.
+- Written with `memory_write` (`encoding: "base64"`) or with REST `PUT /files/{path}` (raw bytes); read with `memory_read` (an image is returned as an MCP image) or REST `GET /files/{path}`.
+- They have metadata, versions, history, moves, soft delete and restore like text documents. They have no lines: `memory_edit` accepts only `set_metadata`, `memory_read` refuses `section` and `view_range`, `memory_search` never matches them. A move cannot change a text document into a binary one or the reverse (`INVALID_ARGUMENT`).
+
+### Append-only documents
+
+- `memory_write` with `append_only: true` (mode `create` only, text documents only) creates an append-only document. The flag never changes afterwards; it is kept across moves, deletion and restore.
+- A change of its content is accepted only when the new content starts with the current content: `memory_edit` `append` without section, `append` to the last section (or with `create_section`), an `overwrite` that only adds at the end. Anything else, including `str_replace`, `insert`, `prepend` and `replace_section`, fails with `APPEND_ONLY` and changes nothing. `set_metadata` is allowed.
+- Agent tokens cannot move or delete it, directly, through a folder, or by moving another document onto it (`APPEND_ONLY`). The admin token can.
+
 ### Versions
 
 - Each document has a version, starting at 1 and incremented by every change: create, overwrite, edit, move, delete, restore.
@@ -100,7 +114,7 @@ Violations give `INVALID_PATH` (or `IS_FOLDER` when the path is an existing fold
 
 ### Results and errors
 
-- A result is text only: `{"content":[{"type":"text","text":"…"}]}`. There is no `structuredContent`.
+- A result is text: `{"content":[{"type":"text","text":"…"}]}`, followed for `memory_read` of an image by `{"type":"image","data":"<base64>","mimeType":"image/png"}`. There is no `structuredContent`.
 - An error is `{"content":[{"type":"text","text":"Error: <message>"}],"isError":true}`. The message says what failed, where and what to do; the error code is not shown. Unexpected failures give `Error: internal error in the memory service`.
 - Invalid arguments (wrong type, missing required field, out-of-range number) are rejected by the MCP SDK, also as an `isError` result.
 
@@ -135,11 +149,18 @@ Entries (folders and documents) are sorted by path. A folder's count is the numb
 /overview.md · v1 · 312 B · 2026-10-10T16:02:11.007Z · Map of the application
 ```
 
+After the date, a binary document shows its media type and an append-only document shows `append-only`:
+
+```
+/sessions/042/log/log.md · v12 · 8.4 KB · 2026-10-19T14:02:11.007Z · append-only · Session 042 log
+/sessions/042/log/login-page.png · v1 · 48.2 KB · 2026-10-19T14:01:52.311Z · image/png
+```
+
 When the page is truncated, a last line says `next_offset=N (more entries: call again with offset=N)`.
 
 ### `memory_read`
 
-> Read one memory document, whole or in part. Returns numbered lines, the document's metadata and its current version. Read only the documents relevant to the task; use section or view_range for large documents.
+> Read one memory document, whole or in part. Returns numbered lines, the document's metadata and its current version. Read only the documents relevant to the task; use section or view_range for large documents. An image document is returned as an image.
 
 | Parameter | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -166,8 +187,19 @@ lines 12-15 of 40
     15	
 ```
 
-- Header lines without a value (description, tags, metadata, section) are omitted. A past version shows `version: 2 (past version; current is 4)`; an empty document shows `(empty document)`.
+- Header lines without a value (description, tags, metadata, section) are omitted. A past version shows `version: 2 (past version; current is 4)`; an empty document shows `(empty document)`. An append-only document has the line `append-only: yes (only additions at the end are accepted)` after `updated`.
 - Output is limited to `MEMORY_MCP_MAX_OUTPUT_CHARS` (default 40000) characters. Beyond it, the last line is `[truncated after line X of N; read the rest with view_range [X+1, to]]`.
+
+A binary document gives the header, ending with its type and size, and no lines. An image up to `MEMORY_MCP_MAX_IMAGE_BYTES` (default 1 MiB) follows as an MCP image (of the version read):
+
+```
+path: /sessions/042/log/login-page.png
+version: 1
+updated: 2026-10-19T14:01:52.311Z
+binary: image/png, 48.2 KB
+```
+
+A bigger image, or a video, is not returned; a last line says why and where to get it, e.g. `(not shown: larger than the 1048576 bytes limit for images; download it with GET /api/stores/squashtm/files/sessions/042/log/login-page.png)` (with `?version=N` for a past version).
 
 ### `memory_search`
 
@@ -183,6 +215,7 @@ lines 12-15 of 40
 | `limit` | integer 1–100 | 20 | Page size. |
 | `offset` | integer ≥ 0 | 0 | Page start. |
 
+- Binary documents never match.
 - Matching is line by line. `keyword` is a case-insensitive literal and cannot contain a newline. `regex` is a JavaScript regular expression (flag `g`, case-sensitive unless written otherwise), at most 500 characters; an invalid one gives `INVALID_ARGUMENT`.
 - One hit per matching line; `score` is the number of matches in the line. Hits are ordered by document path, then line.
 - `section` is the innermost heading above the line, absent before the first heading. The snippet is the line, cut to 200 characters around the first match with `…`.
@@ -199,13 +232,15 @@ No hit gives `No match`. A truncated page ends with `next_offset=N (more matches
 
 ### `memory_write`
 
-> Create a document, or replace the whole content of an existing one. mode 'create' fails if the path exists; mode 'overwrite' fails if it does not. For small changes prefer memory_edit.
+> Create a document, or replace the whole content of an existing one. mode 'create' fails if the path exists; mode 'overwrite' fails if it does not. For small changes prefer memory_edit. A path ending in .png, .jpg, .jpeg, .gif, .webp or .webm is a binary document, written with encoding 'base64'.
 
 | Parameter | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `path` | string | required | Document path. |
-| `file_text` | string | required | Whole content. |
+| `file_text` | string | required | Whole content; base64 data when `encoding` is `base64`. |
 | `mode` | `create` \| `overwrite` | `create` | |
+| `encoding` | `text` \| `base64` | `text` | `base64` for a [binary document](#binary-documents); whitespace in the data is ignored, anything else that is not base64 gives `INVALID_ARGUMENT`. |
+| `append_only` | boolean | — | Create only: makes the document [append-only](#append-only-documents). Refused with `overwrite` (even `false`) and for binary documents (`INVALID_ARGUMENT`). |
 | `description` | string | — | One line stating the document's scope. |
 | `tags` | string[] | — | |
 | `metadata` | map string→string | — | |
@@ -213,7 +248,7 @@ No hit gives `No match`. A truncated page ends with `next_offset=N (more matches
 | `change_note` | string | — | Kept in the history. |
 
 - `create`: `ALREADY_EXISTS` if the path is a document, `IS_FOLDER` if it is a folder, `INVALID_PATH` if an ancestor is a document; `if_version` is rejected. Missing metadata fields are empty.
-- `overwrite`: `NOT_FOUND` (or `IS_FOLDER`) if there is no document; `VERSION_CONFLICT` on `if_version` mismatch. Omitted `description`, `tags` and `metadata` keep their current values; given ones replace them entirely.
+- `overwrite`: `NOT_FOUND` (or `IS_FOLDER`) if there is no document; `VERSION_CONFLICT` on `if_version` mismatch; `APPEND_ONLY` if the document is append-only and the new content does not start with the current one. Omitted `description`, `tags` and `metadata` keep their current values; given ones replace them entirely.
 
 ```
 OK /entities/requirement.md version=1 (created)
@@ -245,6 +280,8 @@ Operations, selected by `op`:
 
 For `append` and `prepend` with a `section` that does not exist: `SECTION_NOT_FOUND`, or, with `create_section`, the heading is added at the end of the document (after a blank line) followed by the text.
 
+On an append-only document, the result must start with the current content, otherwise `APPEND_ONLY` (checked on the result of all the operations). On a binary document, any operation other than `set_metadata` gives `INVALID_ARGUMENT`.
+
 - With several operations, an error message is prefixed `Operation i (op) failed: …; no operation was applied`, and `details.operation` is `i`.
 - The result content is checked against the size limit.
 - On success the result lists the changed region of the new text (at most 40 lines shown):
@@ -269,7 +306,7 @@ When lines were only removed, the second line is `Lines removed after line N`. A
 | `change_note` | string | — | Kept in the history. |
 
 - A document moves to `new_path`. A folder moves with all the documents below it, each keeping its relative path.
-- Errors: root or identical paths, folder into itself: `INVALID_ARGUMENT`; nothing at `old_path`: `NOT_FOUND`; existing target without `overwrite`: `ALREADY_EXISTS` (lists up to 10 conflicting paths); a folder onto a document: `ALREADY_EXISTS`; target is an existing folder or below a document: `IS_FOLDER` / `INVALID_PATH`.
+- Errors: root or identical paths, folder into itself, a document moved to a path of the other kind (text ↔ binary extension): `INVALID_ARGUMENT`; an agent token moving an append-only document or replacing one with `overwrite`: `APPEND_ONLY`; nothing at `old_path`: `NOT_FOUND`; existing target without `overwrite`: `ALREADY_EXISTS` (lists up to 10 conflicting paths); a folder onto a document: `ALREADY_EXISTS`; target is an existing folder or below a document: `IS_FOLDER` / `INVALID_PATH`.
 - Each moved document gets a new version (`op` `move`) and keeps its id.
 
 ```
@@ -290,7 +327,7 @@ Replaced (kept in history): /model/b.md
 | `if_version` | integer ≥ 1 | — | Document only: expected current version. |
 | `change_note` | string | — | Kept in the history. |
 
-Errors: root: `INVALID_ARGUMENT`; folder without `recursive`: `IS_FOLDER`; `if_version` on a folder: `INVALID_ARGUMENT`; nothing at the path: `NOT_FOUND`. Deletion is soft and adds a version (`op` `delete`).
+Errors: root: `INVALID_ARGUMENT`; folder without `recursive`: `IS_FOLDER`; `if_version` on a folder: `INVALID_ARGUMENT`; nothing at the path: `NOT_FOUND`; an agent token deleting an append-only document, or a folder containing one: `APPEND_ONLY` (lists up to 10 paths). Deletion is soft and adds a version (`op` `delete`).
 
 ```
 OK deleted 1 document (kept in history)
@@ -340,7 +377,7 @@ v4 · 2026-10-10T16:05:02.441Z · move to /entities/requirement.md · admin · 1
 
 - Base: `http://<host>:9501/api`. Store-scoped routes are under `/api/stores/{store}`.
 - Document paths follow `/docs/` and `/history/` without their leading `/`, URL-encoded per segment: `/api/stores/squashtm/docs/entities/requirement.md`.
-- Request and response bodies are JSON (`Content-Type: application/json`). A body that is not a JSON object gives 400. Body size is limited to twice `MEMORY_MAX_DOCUMENT_BYTES` plus 64 KiB.
+- Request and response bodies are JSON (`Content-Type: application/json`), except the raw bytes of `/files/`. A body that is not a JSON object gives 400. A JSON body is limited to the larger of twice `MEMORY_MAX_DOCUMENT_BYTES` and `MEMORY_MAX_FILE_BYTES` in base64, plus 64 KiB; a `/files/` body to `MEMORY_MAX_FILE_BYTES`.
 - Numeric and boolean query values are given as text (`depth=3`, `recursive=true`); invalid values give 400.
 - Results are the core's JSON objects; the MCP text above is a rendering of the same data.
 - `ETag: "<version>"` is returned by reads of the current version and by writes. `If-Match: "<version>"` (also `7` or `W/"7"`; `*` means no check) maps to `if_version`; a malformed value gives 400.
@@ -364,6 +401,8 @@ See [Error codes](#error-codes) for the status of each code. `401` responses als
 | GET | `/api/stores/{store}/list` | read | `memory_list` |
 | GET | `/api/stores/{store}/docs/{path}` | read | `memory_read` |
 | PUT | `/api/stores/{store}/docs/{path}` | write | `memory_write` |
+| GET | `/api/stores/{store}/files/{path}` | read | `memory_read` (binary) |
+| PUT | `/api/stores/{store}/files/{path}` | write | `memory_write` (binary) |
 | PATCH | `/api/stores/{store}/docs/{path}` | write | `memory_edit` |
 | DELETE | `/api/stores/{store}/docs/{path}` | write | `memory_delete` |
 | POST | `/api/stores/{store}/search` | read | `memory_search` |
@@ -375,6 +414,7 @@ See [Error codes](#error-codes) for the status of each code. `401` responses als
 | GET | `/api/stores/{store}/documents/{id}` | read | |
 | GET | `/api/stores/{store}/documents/{id}/history` | read | |
 | GET | `/api/stores/{store}/documents/{id}/versions/{version}` | read | |
+| GET | `/api/stores/{store}/documents/{id}/versions/{version}/file` | read | |
 | POST | `/api/stores/{store}/restore` | admin | |
 
 "read": any token reaching the store; "write": admin, or an agent token reaching the store (the viewer gets 403); an agent token on another store gets 403.
@@ -394,9 +434,11 @@ Query: `path`, `depth`, `tags` (comma-separated), `limit`, `offset`, as in `memo
 ```json
 {"path": "/", "total": 2, "entries": [
   {"type": "folder", "path": "/entities", "documents": 2},
-  {"type": "document", "id": 7, "path": "/overview.md", "version": 1, "size": 312, "updated_at": "…", "tags": [], "description": "Map of the application"}
+  {"type": "document", "id": 7, "path": "/overview.md", "version": 1, "size": 312, "updated_at": "…", "tags": [], "description": "Map of the application", "append_only": false}
 ], "next_offset": 2}
 ```
+
+A binary document entry also has `content_type`, e.g. `"content_type": "image/png"`.
 
 `next_offset` is present only when more entries remain.
 
@@ -404,17 +446,19 @@ Query: `path`, `depth`, `tags` (comma-separated), `limit`, `offset`, as in `memo
 
 Query: `section`; `from` and `to` (giving either sets `view_range` to `[from or 1, to or -1]`); `version`.
 
-Returns the `memory_read` data with the selected lines joined into `content` (ending with `\n`, or `""` when no line) instead of a `lines` array. `ETag` is set unless a past version was read.
+Returns the `memory_read` data with the selected lines joined into `content` (ending with `\n`, or `""` when no line) instead of a `lines` array. `ETag` is set unless a past version was read. A binary document gives 400 (`INVALID_ARGUMENT`), pointing to `GET /files/{path}`.
 
 ```json
 {"path": "/entities/requirement.md", "version": 4, "current_version": 4, "is_past_version": false,
- "description": "Requirement entity", "tags": ["entity"], "metadata": {}, "updated_at": "…",
+ "description": "Requirement entity", "tags": ["entity"], "metadata": {}, "updated_at": "…", "append_only": false, "size": 1290,
  "total_lines": 40, "from": 12, "to": 15, "section": "## UI pages", "content": "## UI pages\n\n- Page URL: /req\n\n"}
 ```
 
+`size` is the size of the whole version read, in bytes.
+
 ### `PUT /api/stores/{store}/docs/{path}`
 
-`memory_write`. Body: `{file_text, description?, tags?, metadata?, change_note?}`; `path`, `mode` and `if_version` in the body are ignored.
+`memory_write`. Body: `{file_text, encoding?, append_only?, description?, tags?, metadata?, change_note?}`; `path`, `mode` and `if_version` in the body are ignored.
 
 - `If-None-Match: *`: create (409 if the document exists).
 - Otherwise: overwrite (404 if it does not exist), with `If-Match` as `if_version`.
@@ -427,6 +471,27 @@ Response: `201` when created, else `200`, with `ETag` and the write result:
 ```
 
 `unchanged: true` is set when nothing changed.
+
+### `GET /api/stores/{store}/files/{path}`
+
+The bytes of a binary document. Query: `version` (a past version; default: the current one). Response: the file, with `Content-Type` (its media type), `Content-Disposition: inline`, `Cache-Control: private, no-cache`, and `ETag` unless a past version was read. A text document gives 400.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -o login-page.png $B/files/sessions/042/log/login-page.png
+```
+
+### `PUT /api/stores/{store}/files/{path}`
+
+`memory_write` of a binary document, with the raw bytes as body. `Content-Type` must be one of the [allowed media types](#binary-documents) (another one gives 415) and match the extension (400). Query: `description`, `tags` (comma-separated), `change_note`. Headers: `If-None-Match: *` / `If-Match` as for `PUT /docs/`. Response: `201` when created, else `200`, with `ETag` and the write result.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: image/png' -H 'If-None-Match: *' \
+  --data-binary @login-page.png "$B/files/sessions/042/log/login-page.png?change_note=session_042%3A%20login%20page"
+```
+
+```json
+{"path": "/sessions/042/log/login-page.png", "version": 1, "created": true}
+```
 
 ### `PATCH /api/stores/{store}/docs/{path}`
 
@@ -512,8 +577,10 @@ A document by id, live or deleted, without content:
 
 ```json
 {"id": 3, "path": "/entities/requirement.md", "version": 5, "description": "…", "tags": ["entity"], "metadata": {},
- "size": 1290, "created_at": "…", "updated_at": "…", "deleted": false}
+ "size": 1290, "created_at": "…", "updated_at": "…", "append_only": false, "deleted": false}
 ```
+
+A binary document also has `content_type`.
 
 ### `GET /api/stores/{store}/documents/{id}/history`
 
@@ -526,8 +593,14 @@ One stored version with its content:
 ```json
 {"doc_id": 3, "version": 4, "current_version": 5, "deleted": false, "op": "move", "path": "/entities/requirement.md",
  "content": "# Requirement\n…", "description": "…", "tags": [], "metadata": {}, "size": 1210,
- "created_at": "…", "actor": "admin", "change_note": null}
+ "created_at": "…", "actor": "admin", "change_note": null, "append_only": false}
 ```
+
+For a binary document, `content` is `""` and `content_type` is set; its bytes come from the next endpoint.
+
+### `GET /api/stores/{store}/documents/{id}/versions/{version}/file`
+
+The bytes of one version of a binary document, live or deleted, with the same headers as `GET /files/{path}`. A text document gives 400.
 
 ### `POST /api/stores/{store}/restore`
 
@@ -551,15 +624,16 @@ Errors: neither `doc_id` nor `path`: 400; no such deleted document or version: 4
 
 | Code | HTTP | When |
 | --- | --- | --- |
-| `INVALID_ARGUMENT` | 400 | Invalid or contradictory arguments, malformed header or body, invalid store name, schema validation failure (`Invalid arguments: …`) |
+| `INVALID_ARGUMENT` | 400 | Invalid or contradictory arguments, malformed header or body, invalid store name, schema validation failure (`Invalid arguments: …`), binary content not matching its extension; 415 for a request `Content-Type` the server does not accept |
 | `INVALID_PATH` | 400 | Path breaks the path rules, or lies below a document |
 | `UNAUTHORIZED` | 401 | Missing or unknown bearer token (REST only; MCP returns a JSON-RPC error) |
 | `FORBIDDEN` | 403 | Store not reachable by the token, write with the viewer token, admin route without the admin token |
 | `NOT_FOUND` | 404 | Document, folder, version or deleted document not found |
 | `ALREADY_EXISTS` | 409 | Target document exists (create, move, restore) |
 | `IS_FOLDER` | 409 | A document was expected but the path is a folder |
+| `APPEND_ONLY` | 409 | Change of an append-only document that does not only add at its end; move or deletion of one by an agent token |
 | `VERSION_CONFLICT` | 412 | `if_version` / `If-Match` differs from the current version |
-| `TOO_LARGE` | 413 | Document over `MEMORY_MAX_DOCUMENT_BYTES`, or request body over the body limit |
+| `TOO_LARGE` | 413 | Text document over `MEMORY_MAX_DOCUMENT_BYTES`, binary document over `MEMORY_MAX_FILE_BYTES`, or request body over the body limit |
 | `NO_MATCH` | 422 | `str_replace`: `old_str` not found |
 | `NOT_UNIQUE` | 422 | `str_replace`: `old_str` found several times without `replace_all` |
 | `SECTION_NOT_FOUND` | 422 | Heading not in the document |

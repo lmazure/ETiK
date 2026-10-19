@@ -39,8 +39,12 @@ export const searchArgs = z.object({
 
 export const writeArgs = z.object({
   path: z.string(),
-  file_text: z.string(),
+  file_text: z.string().describe("Whole content; base64 data when encoding is 'base64'."),
   mode: z.enum(["create", "overwrite"]).default("create"),
+  encoding: z.enum(["text", "base64"]).default("text")
+    .describe("'base64' for a binary document (.png, .jpg, .jpeg, .gif, .webp, .webm), whose bytes file_text holds in base64."),
+  append_only: z.boolean().optional()
+    .describe("Mode 'create' only: from then on, only additions at the end of the content are accepted, and agents cannot move or delete the document."),
   description: z.string().optional().describe("One line stating the document's scope; shown by memory_list."),
   tags: tagsSchema.optional(),
   metadata: metadataSchema.optional(),
@@ -118,6 +122,15 @@ export const batchArgs = z.object({
   change_note: changeNote,
 });
 
+/** Reading the bytes of a binary document (REST). */
+export const fileArgs = z.object({
+  path: z.string(),
+  version: z.number().int().min(1).optional(),
+});
+
+/** Writing the bytes of a binary document (REST): memory_write without the content, which is the request body. */
+export const fileWriteArgs = writeArgs.omit({ file_text: true, encoding: true, append_only: true });
+
 export const historyArgs = z.object({
   path: z.string(),
   limit: z.number().int().min(1).max(100).default(20),
@@ -174,7 +187,7 @@ export const tools = {
     readOnly: true,
   },
   memory_read: {
-    description: "Read one memory document, whole or in part. Returns numbered lines, the document's metadata and its current version. Read only the documents relevant to the task; use section or view_range for large documents.",
+    description: "Read one memory document, whole or in part. Returns numbered lines, the document's metadata and its current version. Read only the documents relevant to the task; use section or view_range for large documents. An image document is returned as an image.",
     schema: readArgs,
     readOnly: true,
   },
@@ -184,7 +197,7 @@ export const tools = {
     readOnly: true,
   },
   memory_write: {
-    description: "Create a document, or replace the whole content of an existing one. mode 'create' fails if the path exists; mode 'overwrite' fails if it does not. For small changes prefer memory_edit.",
+    description: "Create a document, or replace the whole content of an existing one. mode 'create' fails if the path exists; mode 'overwrite' fails if it does not. For small changes prefer memory_edit. A path ending in .png, .jpg, .jpeg, .gif, .webp or .webm is a binary document, written with encoding 'base64'.",
     schema: writeArgs,
     readOnly: false,
   },

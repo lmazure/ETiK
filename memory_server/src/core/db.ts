@@ -68,6 +68,12 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE changesets DROP COLUMN session;
   `,
+  // 4: append-only documents; binary documents (media type fixed at creation, bytes in each version)
+  `
+  ALTER TABLE documents ADD COLUMN append_only INTEGER NOT NULL DEFAULT 0 CHECK (append_only IN (0, 1));
+  ALTER TABLE documents ADD COLUMN content_type TEXT;
+  ALTER TABLE versions ADD COLUMN data BLOB;
+  `,
 ];
 
 export function openDatabase(file: string): DB {

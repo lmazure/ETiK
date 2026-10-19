@@ -4,14 +4,38 @@ Each folder is a configuration of the test container: upload it from the ETiK co
 
 ## squashtm
 
-Exploratory testing of SquashTM: Claude Code drives SquashTM's UI with Playwright CLI and keeps its knowledge of the application in the memory store `squashtm`.
+Exploratory testing of SquashTM: Claude Code drives SquashTM's UI with Playwright CLI and keeps everything in the memory store `squashtm`:
+
+```
+/knowledge/business-rules.md          cross-cutting rules
+/knowledge/<entity>.md                one document per business entity
+/sessions/NNN/charter.md              one folder per Session (001, 002…)
+/sessions/NNN/checklist.md
+/sessions/NNN/log/log.md              append-only replay log
+/sessions/NNN/log/<screenshot>.png
+/sessions/NNN/bugs/MMM/bug.md         one folder per bug (001, 002…)
+/sessions/NNN/bugs/MMM/<screenshot>.png
+```
+
+Markdown documents are written with the `memory_*` tools. Screenshots are taken into the workspace's `tmp/` folder, then uploaded with the `memory-upload` skill (`squashtm/skills/memory-upload/`), which sends the file to the memory server's REST API with `MEMORY_URL` and `MEMORY_AGENT_TOKEN`: the image never goes through the conversation. The workspace only holds temporary files.
 
 Prerequisites, on the host:
 - SquashTM listening on port 8090, e.g. started with Docker Compose as described in the [SquashTM Docker quick start](https://tm-en.doc.squashtest.com/latest/install-guide/installation/install-squash/docker-install.html#quick-start), with its port published on 8090.
 - The memory server listening on port 9501 (see [`../memory_server/README.md`](../memory_server/README.md)), with an agent token for the store `squashtm` (`MEMORY_AGENT_TOKENS=squashtm=…` in `../memory_server/.env`).
 - That token as `MEMORY_AGENT_TOKEN` in `../test_environment/memory.env`.
 
-The store is set in `squashtm/config.json` (the `X-Memory-Store` header of the `memory` MCP server and the `memory agent token` check); the knowledge base instructions copied into the workspace (`squashtm/files/knowledge/INSTRUCTIONS.md`) name it too.
+The store is set in `squashtm/config.json` (the `X-Memory-Store` header of the `memory` MCP server and the `memory agent token` check); the knowledge base instructions copied into the workspace (`squashtm/files/knowledge/INSTRUCTIONS.md`) and the `memory-upload` script name it too.
+
+A store filled before this layout has its knowledge documents under `/entities/` and `/business-rules.md`. Move them once with the admin token (moves keep the history):
+
+```bash
+B=http://localhost:9501/api/stores/squashtm
+H=(-H "Authorization: Bearer $MEMORY_ADMIN_TOKEN" -H "Content-Type: application/json")
+curl "${H[@]}" -X POST $B/move -d '{"old_path":"/entities","new_path":"/knowledge","change_note":"move the knowledge base under /knowledge/"}'
+curl "${H[@]}" -X POST $B/move -d '{"old_path":"/business-rules.md","new_path":"/knowledge/business-rules.md","change_note":"move the knowledge base under /knowledge/"}'
+```
+
+Links between knowledge documents written as `/entities/x.md` must then be fixed by hand. Former Sessions stay in `test_environment/workspace/session_##/`.
 
 ## squashtmsite
 

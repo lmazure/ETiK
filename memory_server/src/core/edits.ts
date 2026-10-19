@@ -7,6 +7,8 @@ export interface DocState {
   description: string;
   tags: string[];
   metadata: Record<string, string>;
+  /** Bytes of a binary document (its text is then empty). */
+  data?: Buffer | undefined;
 }
 
 export interface ChangedLines {
@@ -181,7 +183,8 @@ export function changedLines(before: string, after: string): ChangedLines | unde
 }
 
 export function sameState(a: DocState, b: DocState): boolean {
-  return a.text === b.text && a.description === b.description
+  const sameData = a.data === undefined || b.data === undefined ? a.data === b.data : a.data.equals(b.data);
+  return a.text === b.text && sameData && a.description === b.description
     && JSON.stringify(a.tags) === JSON.stringify(b.tags)
     && JSON.stringify(Object.entries(a.metadata).sort()) === JSON.stringify(Object.entries(b.metadata).sort());
 }

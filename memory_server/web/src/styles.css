@@ -186,3 +186,10 @@ button.link:hover { text-decoration: underline; }
 .search-results ul { list-style: none; margin: 0; padding: 0; }
 .search-results li { padding: 2px 0; }
 .search-results .ln { display: inline-block; min-width: 3em; }
+
+/* Images and videos: binary documents, and those shown inside Markdown documents. */
+.media, .memory-media { display: block; max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px; }
+.memory-media.missing { min-height: 2em; min-width: 8em; }
+.media-diff { display: flex; flex-wrap: wrap; gap: 16px; }
+.media-diff figure { flex: 1 1 280px; margin: 0; }
+.media-diff figcaption { color: var(--muted); font-size: 12px; margin-bottom: 4px; }

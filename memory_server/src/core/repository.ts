@@ -13,10 +13,17 @@ export interface DocSummary {
   size: number;
   created_at: string;
   updated_at: string;
+  /** Only additions at the end of the content are accepted; set at creation. */
+  append_only: boolean;
+  /** Media type of a binary document, fixed at creation; absent for a text document. */
+  content_type?: string;
 }
 
 export interface Doc extends DocSummary {
+  /** Text content; empty for a binary document. */
   content: string;
+  /** Bytes of a binary document. */
+  data?: Buffer;
 }
 
 export interface VersionEntry {
@@ -33,6 +40,7 @@ export interface VersionEntry {
   created_at: string;
   actor: string;
   changeset_id: number;
+  data?: Buffer;
 }
 
 /** Head state of a document, live or deleted. */
@@ -77,6 +85,7 @@ export interface NewVersion {
   description: string;
   tags: string[];
   metadata: Record<string, string>;
+  data: Buffer | undefined;
   changeNote: string | undefined;
   now: string;
 }
@@ -91,7 +100,10 @@ interface SummaryRow {
   size: number;
   created_at: string;
   updated_at: string;
+  append_only: number;
+  content_type: string | null;
   content?: string;
+  data?: Buffer | null;
 }
 
 interface VersionRow {
@@ -108,6 +120,7 @@ interface VersionRow {
   created_at: string;
   actor: string;
   changeset_id: number;
+  data?: Buffer | null;
 }
 
 interface ChangeItemRow {
@@ -130,18 +143,22 @@ function toSummary(row: SummaryRow): DocSummary {
     size: row.size,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    append_only: row.append_only === 1,
+    ...(row.content_type !== null && { content_type: row.content_type }),
   };
 }
 
 function toDoc(row: SummaryRow): Doc {
-  return { ...toSummary(row), content: row.content ?? "" };
+  return { ...toSummary(row), content: row.content ?? "", ...(row.data != null && { data: row.data }) };
 }
 
 function toVersion(row: VersionRow): VersionEntry {
+  const { data, ...rest } = row;
   return {
-    ...row,
+    ...rest,
     tags: JSON.parse(row.tags) as string[],
     metadata: JSON.parse(row.metadata) as Record<string, string>,
+    ...(data != null && { data }),
   };
 }
 
@@ -149,7 +166,7 @@ function toVersion(row: VersionRow): VersionEntry {
 const UNDER_FOLDER = "(? = '/' OR substr(d.path, 1, length(?) + 1) = ? || '/')";
 
 const HEAD_COLUMNS = `d.id, d.path, d.head_version AS version, v.description, v.tags, v.metadata, v.size,
-  d.created_at, d.updated_at`;
+  d.created_at, d.updated_at, d.append_only, d.content_type`;
 
 /** SQL access. All methods are synchronous and run inside the caller's transaction when there is one. */
 export class Repository {
@@ -176,7 +193,7 @@ export class Repository {
 
   getLiveDoc(store: string, path: string): Doc | undefined {
     const row = this.db.prepare(`
-      SELECT ${HEAD_COLUMNS}, v.content FROM documents d
+      SELECT ${HEAD_COLUMNS}, v.content, v.data FROM documents d
       JOIN versions v ON v.doc_id = d.id AND v.version = d.head_version
       WHERE d.store = ? AND d.path = ? AND d.deleted = 0`).get(store, path) as SummaryRow | undefined;
     return row && toDoc(row);
@@ -194,7 +211,7 @@ export class Repository {
 
   listLiveDocsWithContent(store: string, folder: string): Doc[] {
     const rows = this.db.prepare(`
-      SELECT ${HEAD_COLUMNS}, v.content FROM documents d
+      SELECT ${HEAD_COLUMNS}, v.content, v.data FROM documents d
       JOIN versions v ON v.doc_id = d.id AND v.version = d.head_version
       WHERE d.store = ? AND d.deleted = 0 AND ${UNDER_FOLDER}
       ORDER BY d.path`).all(store, folder, folder, folder) as SummaryRow[];
@@ -208,20 +225,22 @@ export class Repository {
     return row.n;
   }
 
-  insertDocument(store: string, path: string, now: string): number {
-    const result = this.db.prepare(
-      "INSERT INTO documents (store, path, head_version, deleted, created_at, updated_at) VALUES (?, ?, 0, 0, ?, ?)",
-    ).run(store, path, now, now);
+  insertDocument(store: string, path: string, now: string, appendOnly: boolean, contentType: string | undefined): number {
+    const result = this.db.prepare(`
+      INSERT INTO documents (store, path, head_version, deleted, created_at, updated_at, append_only, content_type)
+      VALUES (?, ?, 0, 0, ?, ?, ?, ?)`,
+    ).run(store, path, now, now, appendOnly ? 1 : 0, contentType ?? null);
     return Number(result.lastInsertRowid);
   }
 
   /** Appends a version and moves the head pointer to it. */
   appendVersion(v: NewVersion): void {
     this.db.prepare(`
-      INSERT INTO versions (doc_id, version, changeset_id, op, path, content, description, tags, metadata, size, change_note, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      v.docId, v.version, v.changesetId, v.op, v.path, v.content, v.description,
-      JSON.stringify(v.tags), JSON.stringify(v.metadata), Buffer.byteLength(v.content, "utf8"), v.changeNote ?? null, v.now,
+      INSERT INTO versions (doc_id, version, changeset_id, op, path, content, data, description, tags, metadata, size, change_note, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      v.docId, v.version, v.changesetId, v.op, v.path, v.content, v.data ?? null, v.description,
+      JSON.stringify(v.tags), JSON.stringify(v.metadata), v.data ? v.data.length : Buffer.byteLength(v.content, "utf8"),
+      v.changeNote ?? null, v.now,
     );
     this.db.prepare("UPDATE documents SET head_version = ?, path = ?, deleted = ?, updated_at = ? WHERE id = ?")
       .run(v.version, v.path, v.op === "delete" ? 1 : 0, v.now, v.docId);

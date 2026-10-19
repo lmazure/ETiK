@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { openDatabase } from "../../src/core/db.js";
-import { ADMIN_TOKEN, AGENT_TOKEN, OTHER_TOKEN, testConfig } from "../helpers.js";
+import { ADMIN_TOKEN, AGENT_TOKEN, OTHER_TOKEN, PNG, VIEWER_TOKEN, testConfig } from "../helpers.js";
 
 let app: FastifyInstance;
 
@@ -168,5 +168,80 @@ describe("other operations", () => {
     expect(restored.statusCode).toBe(200);
     expect(restored.json()).toMatchObject({ path: "/a.md", version: 3 });
     expect((await app.inject({ method: "POST", url: `${base}/restore`, headers: agent, payload: { doc_id: docId } })).statusCode).toBe(403);
+  });
+});
+
+describe("append-only documents", () => {
+  it("creates one with append_only and maps a refused change to 409", async () => {
+    expect((await create("/s/log.md", { file_text: "# Log\n", append_only: true })).statusCode).toBe(201);
+    const read = await app.inject({ method: "GET", url: `${base}/docs/s/log.md`, headers: agent });
+    expect(read.json()).toMatchObject({ append_only: true, size: 6 });
+    const patch = (operations: unknown[]) =>
+      app.inject({ method: "PATCH", url: `${base}/docs/s/log.md`, headers: agent, payload: { operations } });
+    expect((await patch([{ op: "append", text: "a" }])).statusCode).toBe(200);
+    const refused = await patch([{ op: "str_replace", old_str: "# Log", new_str: "# Journal" }]);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error).toEqual({ code: "APPEND_ONLY", message: expect.stringContaining("is append-only"), details: { path: "/s/log.md" } });
+    expect((await app.inject({ method: "DELETE", url: `${base}/docs/s/log.md`, headers: agent })).statusCode).toBe(409);
+    expect((await app.inject({ method: "DELETE", url: `${base}/docs/s/log.md`, headers: admin })).statusCode).toBe(200);
+  });
+});
+
+describe("binary documents", () => {
+  function upload(path: string, data: Buffer, headers: Record<string, string> = {}, query = "") {
+    return app.inject({
+      method: "PUT", url: `${base}/files${path}${query}`,
+      headers: { ...agent, "content-type": "image/png", "if-none-match": "*", ...headers }, payload: data,
+    });
+  }
+
+  it("uploads raw bytes and downloads them with their type and ETag", async () => {
+    const created = await upload("/s/bugs/001/shot.png", PNG, {}, "?description=Login%20page&tags=shot,bug&change_note=evidence");
+    expect(created.statusCode).toBe(201);
+    expect(created.headers.etag).toBe('"1"');
+    expect(created.json()).toEqual({ path: "/s/bugs/001/shot.png", version: 1, created: true });
+
+    const download = await app.inject({ method: "GET", url: `${base}/files/s/bugs/001/shot.png`, headers: { authorization: `Bearer ${VIEWER_TOKEN}` } });
+    expect(download.statusCode).toBe(200);
+    expect(download.headers["content-type"]).toBe("image/png");
+    expect(download.headers.etag).toBe('"1"');
+    expect(download.headers["x-content-type-options"]).toBe("nosniff");
+    expect(download.rawPayload.equals(PNG)).toBe(true);
+
+    const list = await app.inject({ method: "GET", url: `${base}/list?path=/s/bugs/001`, headers: agent });
+    expect(list.json().entries[0]).toMatchObject({ content_type: "image/png", description: "Login page", tags: ["shot", "bug"], size: PNG.length });
+
+    const read = await app.inject({ method: "GET", url: `${base}/docs/s/bugs/001/shot.png`, headers: agent });
+    expect(read.statusCode).toBe(400);
+    expect(read.json().error.message).toContain("download it with GET /api/stores/squashtm/files/s/bugs/001/shot.png");
+  });
+
+  it("overwrites with If-Match, serves past versions, and by id for the web app", async () => {
+    await upload("/a.png", PNG);
+    const next = Buffer.concat([PNG, Buffer.from("2")]);
+    expect((await upload("/a.png", next, { "if-none-match": "", "if-match": '"9"' })).statusCode).toBe(412);
+    const overwritten = await upload("/a.png", next, { "if-none-match": "", "if-match": '"1"' });
+    expect(overwritten.statusCode).toBe(200);
+    const past = await app.inject({ method: "GET", url: `${base}/files/a.png?version=1`, headers: agent });
+    expect(past.headers.etag).toBeUndefined();
+    expect(past.rawPayload.equals(PNG)).toBe(true);
+    const id = (await app.inject({ method: "GET", url: `${base}/list`, headers: agent })).json().entries[0].id;
+    const byId = await app.inject({ method: "GET", url: `${base}/documents/${id}/versions/2/file`, headers: agent });
+    expect(byId.rawPayload.equals(next)).toBe(true);
+    const version = await app.inject({ method: "GET", url: `${base}/documents/${id}/versions/2`, headers: agent });
+    expect(version.json()).toMatchObject({ content_type: "image/png", content: "", size: next.length });
+  });
+
+  it("rejects wrong types, wrong content, oversize bodies and the viewer token", async () => {
+    expect((await upload("/a.png", PNG, { "content-type": "image/gif" })).json().error.message)
+      .toBe("Content type image/gif does not match the extension of /a.png (image/png)");
+    expect((await upload("/a.png", Buffer.from("not a png"))).statusCode).toBe(400);
+    expect((await upload("/a.png", PNG, { "content-type": "text/html" })).statusCode).toBe(415);
+    expect((await upload("/a.png", Buffer.concat([PNG, Buffer.alloc(20_000)]))).statusCode).toBe(413);
+    expect((await upload("/a.png", PNG, { authorization: `Bearer ${VIEWER_TOKEN}` })).statusCode).toBe(403);
+    const asJson = await app.inject({
+      method: "PUT", url: `${base}/files/a.png`, headers: { ...agent, "if-none-match": "*" }, payload: { file_text: "x" },
+    });
+    expect(asJson.statusCode).toBe(400);
   });
 });

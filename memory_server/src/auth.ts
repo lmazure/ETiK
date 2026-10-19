@@ -95,7 +95,7 @@ export class Authenticator {
     if (!this.canAccess(principal, resolved)) {
       throw new AuthError(403, `This token cannot access store '${resolved}'`);
     }
-    return { store: resolved, actor: principal.name };
+    return { store: resolved, actor: principal.name, admin: principal.role === "admin" };
   }
 }
 

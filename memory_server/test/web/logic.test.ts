@@ -5,7 +5,7 @@ import { formatRoute, parseRoute, type Route } from "../../web/src/routes.js";
 import { applyChange, buildTree, fromList } from "../../web/src/tree.js";
 
 function entry(id: number, path: string): DocumentEntry {
-  return { type: "document", id, path, version: 1, size: 1, updated_at: "", tags: [], description: `desc ${id}` };
+  return { type: "document", id, path, version: 1, size: 1, updated_at: "", tags: [], description: `desc ${id}`, append_only: false };
 }
 
 function change(items: Change["items"]): Change {
