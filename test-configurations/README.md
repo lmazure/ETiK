@@ -26,17 +26,6 @@ Prerequisites, on the host:
 
 The store is set in `squashtm/config.json` (the `X-Memory-Store` header of the `memory` MCP server and the `memory agent token` check); the knowledge base instructions copied into the workspace (`squashtm/files/knowledge/INSTRUCTIONS.md`) and the `memory-upload` script name it too.
 
-A store filled before this layout has its knowledge documents under `/entities/` and `/business-rules.md`. Move them once with the admin token (moves keep the history):
-
-```bash
-B=http://localhost:9501/api/stores/squashtm
-H=(-H "Authorization: Bearer $MEMORY_ADMIN_TOKEN" -H "Content-Type: application/json")
-curl "${H[@]}" -X POST $B/move -d '{"old_path":"/entities","new_path":"/knowledge","change_note":"move the knowledge base under /knowledge/"}'
-curl "${H[@]}" -X POST $B/move -d '{"old_path":"/business-rules.md","new_path":"/knowledge/business-rules.md","change_note":"move the knowledge base under /knowledge/"}'
-```
-
-Links between knowledge documents written as `/entities/x.md` must then be fixed by hand. Former Sessions stay in `test_environment/workspace/session_##/`.
-
 ## squashtmsite
 
 Review of the SquashTM marketing site (spelling, translations, links, forms, claims): Claude Code browses the site with Playwright CLI, writes one report per issue, and keeps its knowledge of the site in the memory store `squashtmsite`.

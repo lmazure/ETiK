@@ -43,7 +43,7 @@ Every fact carries a tag so the memory can be trusted and curated:
 
 Always record the **Session** and **date**, plus — for `documented` — the source name.
 Format: `<tag>, session_NNN, YYYY-MM-DD[, <source name>]` (e.g. `observed, session_042, 2026-10-19`), where `session_NNN` is the name of the current Session (its folder is `/sessions/NNN/`).
-The Session lets you trace a fact back to its log `/sessions/NNN/log/log.md` for the full context; `memory_history` also shows which Session changed what, through the change notes. Facts recorded before the Sessions moved to the memory server name their Session `session_##` (two digits).
+The Session lets you trace a fact back to its log `/sessions/NNN/log/log.md` for the full context; `memory_history` also shows which Session changed what, through the change notes.
 
 ## Entity document schema
 

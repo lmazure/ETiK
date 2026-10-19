@@ -678,10 +678,6 @@ export class MemoryCore {
     }
     if (!existing) this.requireDoc(store, path);
     const doc = existing!;
-    if (doc.content_type !== contentType) {
-      throw new MemoryError("INVALID_ARGUMENT", `${path} is a ${doc.content_type ?? "text"} document; it cannot be replaced by ${contentType ?? "text"}`,
-        { path });
-    }
     this.checkVersion(doc, args.if_version);
     const next: DocState = {
       text,
