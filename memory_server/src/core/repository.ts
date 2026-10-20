@@ -334,4 +334,33 @@ export class Repository {
   getDeletedDoc(store: string, docId: number): DeletedDoc | undefined {
     return this.listDeletedDocs(store).find((d) => d.doc_id === docId);
   }
+
+  // ---------------------------------------------------------------- embeddings cache (semantic search)
+
+  /** Cached vectors of these chunk hashes for a model; missing hashes are absent from the map. */
+  getEmbeddings(model: string, hashes: string[]): Map<string, Float32Array> {
+    const vectors = new Map<string, Float32Array>();
+    for (let start = 0; start < hashes.length; start += EMBEDDING_BATCH) {
+      const batch = hashes.slice(start, start + EMBEDDING_BATCH);
+      const rows = this.db.prepare(`
+        SELECT hash, vector FROM embeddings WHERE model = ? AND hash IN (${batch.map(() => "?").join(",")})`)
+        .all(model, ...batch) as { hash: string; vector: Buffer }[];
+      for (const row of rows) {
+        // Copied so that the floats are aligned whatever the offset of the Buffer.
+        const bytes = new Uint8Array(row.vector);
+        vectors.set(row.hash, new Float32Array(bytes.buffer, 0, bytes.byteLength / Float32Array.BYTES_PER_ELEMENT));
+      }
+    }
+    return vectors;
+  }
+
+  putEmbeddings(model: string, rows: { hash: string; vector: Float32Array }[]): void {
+    const insert = this.db.prepare("INSERT OR IGNORE INTO embeddings (model, hash, vector) VALUES (?, ?, ?)");
+    this.db.transaction(() => {
+      for (const row of rows) insert.run(model, row.hash, Buffer.from(row.vector.buffer, row.vector.byteOffset, row.vector.byteLength));
+    })();
+  }
 }
+
+/** Hashes per `IN (…)` query, below SQLite's limit on bound parameters. */
+const EMBEDDING_BATCH = 500;

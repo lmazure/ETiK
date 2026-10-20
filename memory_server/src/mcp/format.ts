@@ -72,14 +72,20 @@ export function formatRead(result: ReadResult, maxChars: number, note?: string):
   return out.join("\n");
 }
 
+/** Keyword and regex: one hit per line. Semantic and hybrid: one hit per section chunk, `path:from-to`, most relevant first. */
 export function formatSearch(result: SearchResult): string {
   if (result.total === 0) return "No match";
-  const out = [plural(result.total, "match", "matches")];
+  const ranked = result.mode === "semantic" || result.mode === "hybrid";
+  const out = [ranked
+    ? `${plural(result.total, "section")}, ${result.mode === "semantic" ? "most similar first" : "most relevant first (similarity and key words)"}`
+    : plural(result.total, "match", "matches")];
   for (const hit of result.hits) {
-    out.push(`${hit.path}:${hit.line} · ${hit.section ?? "(before first heading)"} · ${hit.score}`);
+    const lines = hit.end_line !== undefined && hit.end_line !== hit.line ? `${hit.line}-${hit.end_line}` : `${hit.line}`;
+    out.push(`${hit.path}:${lines} · ${hit.section ?? "(before first heading)"} · ${hit.score}`);
     out.push(`    ${hit.snippet}`);
   }
-  if (result.next_offset !== undefined) out.push(`next_offset=${result.next_offset} (more matches: call again with offset=${result.next_offset})`);
+  const more = ranked ? "more results" : "more matches";
+  if (result.next_offset !== undefined) out.push(`next_offset=${result.next_offset} (${more}: call again with offset=${result.next_offset})`);
   return out.join("\n");
 }
 

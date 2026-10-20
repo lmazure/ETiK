@@ -28,6 +28,8 @@ export default defineConfig({
       MEMORY_VIEWER_TOKEN: E2E.viewerToken,
       MEMORY_AGENT_TOKENS: `squashtm=${E2E.agentToken}`,
       LOG_LEVEL: "warn",
+      // Downloaded on the first run, then reused.
+      MEMORY_MODEL_DIR: "models",
     },
   },
 });

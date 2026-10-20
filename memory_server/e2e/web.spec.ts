@@ -113,6 +113,19 @@ test("search leads to the matching line", async ({ page, request }) => {
   await expect(page.locator(".raw tr.highlight")).toContainText("needle here");
 });
 
+test("semantic search finds a section written in other words", async ({ page, request }) => {
+  test.setTimeout(180_000); // the first run downloads the embedding model into models/
+  await create(request, "/semantic/requirement.md",
+    "# Requirement\n\n## Pages\n- URL: /req\n\n## Deletion\n- Removing a requirement that is linked to a test case is refused\n");
+  await logIn(page);
+  await page.getByRole("combobox", { name: "Search mode" }).selectOption("semantic");
+  await page.getByRole("searchbox", { name: "Search" }).fill("can a requirement with test cases be deleted?");
+  await page.getByRole("searchbox", { name: "Search" }).press("Enter");
+  await expect(page).toHaveURL(/search\?q=.*&mode=semantic/);
+  await page.getByRole("link", { name: /\/semantic\/requirement\.md:6-7 · ## Deletion/ }).click({ timeout: 150_000 });
+  await expect(page.locator(".raw tr.highlight")).toContainText("## Deletion");
+});
+
 test("a link to another memory document opens it in the app", async ({ page, request }) => {
   await create(request, "/links/requirement.md", "# Requirement\n\nThe target.\n");
   await create(request, "/links/high-level.md",

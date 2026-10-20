@@ -2,7 +2,10 @@
 services:
   memory:
     container_name: memory-server
-    build: .
+    build:
+      context: .
+      args:
+        MEMORY_EMBEDDING_MODEL: ${MEMORY_EMBEDDING_MODEL:-english}
     image: memory-server:latest
     environment:
       MEMORY_ADMIN_TOKEN: ${MEMORY_ADMIN_TOKEN:?set MEMORY_ADMIN_TOKEN in .env}

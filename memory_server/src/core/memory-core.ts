@@ -5,12 +5,14 @@ import {
   type ReadArgs, type RestoreArgs, type SearchArgs, type WriteArgs,
 } from "../schemas.js";
 import type { DB } from "./db.js";
+import type { Embedder } from "./embedder.js";
 import { applyEdits, changedLines, normalizeTags, sameState, type ChangedLines, type DocState } from "./edits.js";
 import { MemoryError } from "./errors.js";
 import { enclosingHeading, normalizeNewlines, parseHeadings, requireSection, toLines } from "./markdown.js";
 import { checkMedia, decodeBase64, mediaTypeOf } from "./media.js";
 import { ROOT, ancestorsOf, normalizeDocPath, normalizeFolderPath, rebase } from "./paths.js";
 import { Repository, type Change, type Doc, type DocInfo, type DocSummary, type VersionOp } from "./repository.js";
+import { SemanticSearch, type Logger } from "./semantic.js";
 
 export type { Change, ChangeItem, DocInfo, VersionOp } from "./repository.js";
 
@@ -26,6 +28,11 @@ export interface CoreOptions {
   maxDocumentBytes: number;
   /** Maximum size of a binary document, in bytes. */
   maxFileBytes: number;
+  /** Model for the semantic and hybrid search modes; without one, they are refused with UNSUPPORTED. */
+  embedder?: Embedder | undefined;
+  /** Delay before the chunks written by a call are embedded in the background (default 500 ms). */
+  refreshDelayMs?: number;
+  logger?: Logger | undefined;
 }
 
 export interface FolderEntry {
@@ -95,13 +102,17 @@ interface Content {
 
 export interface SearchHit {
   path: string;
+  /** Matching line (keyword, regex), or first line of the matching chunk (semantic, hybrid). */
   line: number;
+  /** Last line of the matching chunk (semantic, hybrid). */
+  end_line?: number;
   section?: string;
   snippet: string;
   score: number;
 }
 
 export interface SearchResult {
+  mode: SearchArgs["mode"];
   hits: SearchHit[];
   total: number;
   next_offset?: number;
@@ -198,6 +209,7 @@ interface Tx {
 
 const STORE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const MAX_REGEX_LENGTH = 500;
+const MAX_SEMANTIC_QUERY_LENGTH = 1000;
 const SNIPPET_LENGTH = 200;
 
 export function validateStoreName(store: string): void {
@@ -236,9 +248,12 @@ function paginate<T>(items: T[], offset: number, limit: number): { page: T[]; ne
  */
 export class MemoryCore {
   private readonly repo: Repository;
+  private readonly semantic: SemanticSearch | undefined;
 
   constructor(private readonly db: DB, private readonly options: CoreOptions) {
     this.repo = new Repository(db);
+    this.semantic = options.embedder && new SemanticSearch(this.repo, options.embedder,
+      { refreshDelayMs: options.refreshDelayMs ?? 500, logger: options.logger });
   }
 
   // ---------------------------------------------------------------- reads
@@ -348,21 +363,13 @@ export class MemoryCore {
     return { path, version, current_version: doc.version, content_type: doc.content_type, data: data ?? Buffer.alloc(0) };
   }
 
-  search(ctx: Context, args: SearchArgs): SearchResult {
+  async search(ctx: Context, args: SearchArgs): Promise<SearchResult> {
     validateStoreName(ctx.store);
-    if (args.mode === "semantic" || args.mode === "hybrid") {
-      throw new MemoryError("UNSUPPORTED", `Search mode '${args.mode}' is not supported by this store; use 'keyword' or 'regex'`,
-        { mode: args.mode });
-    }
+    if (args.mode === "semantic" || args.mode === "hybrid") return this.semanticSearch(ctx, args, args.mode);
     if (args.query === "") throw new MemoryError("INVALID_ARGUMENT", "query must not be empty");
     const matcher = this.matcher(args.query, args.mode);
-    const prefix = normalizeFolderPath(args.path_prefix);
-    const single = prefix === ROOT ? undefined : this.repo.getLiveDoc(ctx.store, prefix);
-    const docs = (single ? [single] : this.repo.listLiveDocsWithContent(ctx.store, prefix))
-      .filter((d) => hasAllTags(d, args.tags))
-      .filter((d) => Object.entries(args.metadata ?? {}).every(([k, v]) => d.metadata[k] === v));
     const hits: SearchHit[] = [];
-    for (const doc of docs) {
+    for (const doc of this.searchedDocs(ctx, args)) {
       const lines = toLines(doc.content);
       const headings = parseHeadings(lines);
       lines.forEach((line, index) => {
@@ -375,8 +382,7 @@ export class MemoryCore {
         });
       });
     }
-    const { page, next_offset } = paginate(hits, args.offset, args.limit);
-    return { hits: page, total: hits.length, ...(next_offset !== undefined && { next_offset }) };
+    return this.searchResult(args, hits);
   }
 
   history(ctx: Context, args: HistoryArgs): HistoryResult {
@@ -477,6 +483,16 @@ export class MemoryCore {
     return this.repo.listStores();
   }
 
+  /** At startup: loads the embedding model and indexes every store, in the background. */
+  warmUpSemanticSearch(): void {
+    this.semantic?.refreshAll(this.repo.listStores().map((s) => s.name));
+  }
+
+  /** Stops the pending background indexing. */
+  close(): void {
+    this.semantic?.close();
+  }
+
   listDeleted(ctx: Context): ReturnType<Repository["listDeletedDocs"]> {
     validateStoreName(ctx.store);
     return this.repo.listDeletedDocs(ctx.store);
@@ -532,7 +548,42 @@ export class MemoryCore {
       };
       return fn(tx);
     });
-    return run.immediate();
+    const result = run.immediate();
+    this.semantic?.scheduleRefresh(ctx.store);
+    return result;
+  }
+
+  /** Live documents a search covers: below path_prefix (or that document), with the tags and metadata asked for. */
+  private searchedDocs(ctx: Context, args: SearchArgs): Doc[] {
+    const prefix = normalizeFolderPath(args.path_prefix);
+    const single = prefix === ROOT ? undefined : this.repo.getLiveDoc(ctx.store, prefix);
+    return (single ? [single] : this.repo.listLiveDocsWithContent(ctx.store, prefix))
+      .filter((d) => hasAllTags(d, args.tags))
+      .filter((d) => Object.entries(args.metadata ?? {}).every(([k, v]) => d.metadata[k] === v));
+  }
+
+  private searchResult(args: SearchArgs, hits: SearchHit[]): SearchResult {
+    const { page, next_offset } = paginate(hits, args.offset, args.limit);
+    return { mode: args.mode, hits: page, total: hits.length, ...(next_offset !== undefined && { next_offset }) };
+  }
+
+  /** One hit per chunk (a section or part of one), most relevant first; binary documents have no chunk. */
+  private async semanticSearch(ctx: Context, args: SearchArgs, mode: "semantic" | "hybrid"): Promise<SearchResult> {
+    if (!this.semantic) {
+      throw new MemoryError("UNSUPPORTED",
+        `Search mode '${mode}' is not available: semantic search is disabled on this server (MEMORY_EMBEDDING_MODEL=none); use 'keyword' or 'regex'`,
+        { mode });
+    }
+    if (args.query.trim() === "") throw new MemoryError("INVALID_ARGUMENT", "query must not be empty");
+    if (args.query.length > MAX_SEMANTIC_QUERY_LENGTH) {
+      throw new MemoryError("INVALID_ARGUMENT",
+        `A ${mode} query is limited to ${MAX_SEMANTIC_QUERY_LENGTH} characters; describe what you look for in fewer words`);
+    }
+    const ranked = await this.semantic.rank(this.searchedDocs(ctx, args), args.query, mode);
+    return this.searchResult(args, ranked.map((r) => ({
+      path: r.path, line: r.chunk.from, end_line: r.chunk.to, ...(r.chunk.section !== undefined && { section: r.chunk.section }),
+      snippet: snippetOf(r.line, r.index), score: r.score,
+    })));
   }
 
   private appendVersion(tx: Tx, docId: number, version: number, op: VersionOp, path: string, state: DocState,

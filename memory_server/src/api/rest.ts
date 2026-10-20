@@ -194,7 +194,7 @@ export function registerRest(app: FastifyInstance, core: MemoryCore, auth: Authe
     return result;
   });
 
-  app.post("/api/stores/:store/search", async (request) => core.search(context(request), searchArgs.parse(body(request))));
+  app.post("/api/stores/:store/search", async (request) => await core.search(context(request), searchArgs.parse(body(request))));
 
   app.post("/api/stores/:store/move", async (request) => core.move(writeContext(request), moveArgs.parse(body(request))));
 

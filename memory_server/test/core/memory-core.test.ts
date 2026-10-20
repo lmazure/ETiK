@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MemoryError } from "../../src/core/errors.js";
 import { batchArgs, restoreArgs } from "../../src/schemas.js";
-import { PNG, testCore } from "../helpers.js";
+import { FakeEmbedder, PNG, testCore } from "../helpers.js";
 
 function errorOf(fn: () => unknown): MemoryError {
   try {
@@ -130,27 +130,118 @@ describe("list and search", () => {
     expect(t.list({ path: "/", depth: 5, limit: 2, offset: 6 }).next_offset).toBeUndefined();
   });
 
-  it("finds keywords case-insensitively, with section and score", () => {
+  it("finds keywords case-insensitively, with section and score", async () => {
     const t = seeded();
-    const result = t.search({ query: "assumed" });
+    const result = await t.search({ query: "assumed" });
+    expect(result.mode).toBe("keyword");
     expect(result.total).toBe(2);
     expect(result.hits[1]).toEqual({
       path: "/entities/campaign.md", line: 3, section: "## Business rules", snippet: "- assumed, session_01: x Assumed", score: 2,
     });
   });
 
-  it("filters by path prefix, tags and metadata, and supports regex", () => {
+  it("filters by path prefix, tags and metadata, and supports regex", async () => {
     const t = seeded();
-    expect(t.search({ query: "assumed", path_prefix: "/entities" }).total).toBe(1);
-    expect(t.search({ query: "/backend/requirements", metadata: { kind: "entity" } }).hits[0]!.path).toBe("/entities/requirement.md");
-    expect(t.search({ query: "^- (POST|GET) ", mode: "regex", tags: ["entity"] }).total).toBe(1);
-    expect(errorOf(() => t.search({ query: "(", mode: "regex" })).code).toBe("INVALID_ARGUMENT");
+    expect((await t.search({ query: "assumed", path_prefix: "/entities" })).total).toBe(1);
+    expect((await t.search({ query: "/backend/requirements", metadata: { kind: "entity" } })).hits[0]!.path).toBe("/entities/requirement.md");
+    expect((await t.search({ query: "^- (POST|GET) ", mode: "regex", tags: ["entity"] })).total).toBe(1);
+    await expect(t.search({ query: "(", mode: "regex" })).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
   });
 
-  it("rejects semantic search explicitly", () => {
+  it("refuses semantic and hybrid search when no embedding model is configured", async () => {
     const t = seeded();
-    const error = errorOf(() => t.search({ query: "x", mode: "semantic" }));
-    expect(error.code).toBe("UNSUPPORTED");
+    for (const mode of ["semantic", "hybrid"]) {
+      await expect(t.search({ query: "x", mode })).rejects.toMatchObject({
+        code: "UNSUPPORTED",
+        message: `Search mode '${mode}' is not available: semantic search is disabled on this server (MEMORY_EMBEDDING_MODEL=none); use 'keyword' or 'regex'`,
+      });
+    }
+  });
+});
+
+describe("semantic and hybrid search", () => {
+  /** "removed" and "deleted" share a dimension of the fake model, as they would share a meaning. */
+  function seeded(options: { refreshDelayMs?: number } = {}) {
+    const embedder = new FakeEmbedder({ removed: "deleted", remove: "delete" });
+    const t = testCore(10_000, 20_000, { embedder, refreshDelayMs: options.refreshDelayMs ?? 60_000 });
+    t.write({
+      path: "/knowledge/requirement.md", description: "Requirement entity", tags: ["entity"], metadata: { kind: "entity" },
+      file_text: "# Requirement\n\n## UI pages\n- Page URL: /req\n\n## Deletion\n- A requirement linked to a test case cannot be deleted\n",
+    });
+    t.write({ path: "/knowledge/campaign.md", file_text: "# Campaign\n\n## Business rules\n- A campaign groups iterations\n" });
+    t.core.writeFile(t.ctx, { path: "/knowledge/shot.png", mode: "create", data: PNG });
+    return { ...t, embedder };
+  }
+
+  it("ranks section chunks by similarity, with their line range", async () => {
+    const t = seeded();
+    const result = await t.search({ query: "can a requirement linked to a test case be removed?", mode: "semantic" });
+    expect(result.mode).toBe("semantic");
+    expect(result.total).toBe(3);
+    expect(result.hits.map((h) => `${h.path}:${h.line}-${h.end_line}`))
+      .toEqual(["/knowledge/requirement.md:6-7", "/knowledge/requirement.md:3-4", "/knowledge/campaign.md:3-4"]);
+    expect(result.hits[0]).toMatchObject({ section: "## Deletion", snippet: "- A requirement linked to a test case cannot be deleted" });
+    expect(result.hits[0]!.score).toBeGreaterThan(result.hits[1]!.score);
+    expect(result.hits.every((h) => h.score >= 0 && h.score <= 1)).toBe(true);
+    t.core.close();
+  });
+
+  it("applies the filters and pages the results", async () => {
+    const t = seeded();
+    expect((await t.search({ query: "campaign", mode: "semantic", path_prefix: "/knowledge/campaign.md" })).total).toBe(1);
+    expect((await t.search({ query: "campaign", mode: "hybrid", tags: ["entity"] })).hits.map((h) => h.path))
+      .toEqual(["/knowledge/requirement.md", "/knowledge/requirement.md"]);
+    expect((await t.search({ query: "campaign", mode: "semantic", metadata: { kind: "entity" } })).total).toBe(2);
+    expect((await t.search({ query: "campaign", mode: "semantic", path_prefix: "/sessions" })).total).toBe(0);
+    const page = await t.search({ query: "campaign", mode: "semantic", limit: 1, offset: 1 });
+    expect(page.hits).toHaveLength(1);
+    expect(page.next_offset).toBe(2);
+    t.core.close();
+  });
+
+  it("refuses an empty or too long query", async () => {
+    const t = seeded();
+    await expect(t.search({ query: "  ", mode: "semantic" })).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+    await expect(t.search({ query: "x".repeat(1001), mode: "hybrid" })).rejects
+      .toMatchObject({ code: "INVALID_ARGUMENT", message: "A hybrid query is limited to 1000 characters; describe what you look for in fewer words" });
+    t.core.close();
+  });
+
+  it("fuses similarity and key words in hybrid mode", async () => {
+    const t = testCore(10_000, 20_000, { embedder: new FakeEmbedder({ remove: "delete" }), refreshDelayMs: 60_000 });
+    t.write({ path: "/a.md", file_text: "delete requirement\n" });      // most similar, one query word
+    t.write({ path: "/b.md", file_text: "remove requirement later\n" }); // similar, both query words
+    t.write({ path: "/c.md", file_text: "requirement requirement\n" });  // least similar, one query word twice
+    const semantic = await t.search({ query: "remove requirement", mode: "semantic" });
+    expect(semantic.hits.map((h) => h.path)).toEqual(["/a.md", "/b.md", "/c.md"]);
+    const hybrid = await t.search({ query: "remove requirement", mode: "hybrid" });
+    expect(hybrid.mode).toBe("hybrid");
+    expect(hybrid.hits.map((h) => h.path)).toEqual(["/b.md", "/a.md", "/c.md"]);
+    expect(hybrid.hits[0]!.score).toBe(Math.round((1 / 62 + 1 / 61) * 10_000) / 10_000);
+    t.core.close();
+  });
+
+  it("embeds each chunk once: a move reuses the vectors, an edit re-embeds only the changed chunk", async () => {
+    const t = seeded();
+    await t.search({ query: "requirement", mode: "semantic" });
+    expect([t.embedder.passages, t.embedder.queries]).toEqual([3, 1]);
+    await t.search({ query: "campaign", mode: "hybrid" });
+    expect([t.embedder.passages, t.embedder.queries]).toEqual([3, 2]);
+    t.move({ old_path: "/knowledge/campaign.md", new_path: "/knowledge/old/campaign.md" });
+    await t.search({ query: "campaign", mode: "semantic" });
+    expect(t.embedder.passages).toBe(3);
+    t.edit({ path: "/knowledge/requirement.md", operations: [{ op: "str_replace", old_str: "/req", new_str: "/requirements" }] });
+    await t.search({ query: "campaign", mode: "semantic" });
+    expect(t.embedder.passages).toBe(4);
+    t.core.close();
+  });
+
+  it("embeds the chunks of a write in the background", async () => {
+    const t = seeded({ refreshDelayMs: 0 });
+    await vi.waitFor(() => expect(t.embedder.passages).toBe(3));
+    await t.search({ query: "campaign", mode: "semantic" });
+    expect(t.embedder.passages).toBe(3);
+    t.core.close();
   });
 });
 
@@ -387,7 +478,7 @@ describe("binary documents", () => {
       .toBe("TOO_LARGE");
   });
 
-  it("allows only metadata edits, no sections and no change of kind", () => {
+  it("allows only metadata edits, no sections and no change of kind", async () => {
     const t = testCore();
     t.core.writeFile(t.ctx, { path: "/a.png", mode: "create", data: PNG });
     expect(errorOf(() => t.edit({ path: "/a.png", operations: [{ op: "append", text: "x" }] })).message)
@@ -398,7 +489,7 @@ describe("binary documents", () => {
     expect(errorOf(() => t.core.readFile(t.ctx, { path: "/b.md" })).code).toBe("NOT_FOUND");
     t.write({ path: "/b.md", file_text: "PNG\n" });
     expect(errorOf(() => t.core.readFile(t.ctx, { path: "/b.md" })).code).toBe("INVALID_ARGUMENT");
-    expect(t.search({ query: "PNG" }).hits.map((h) => h.path)).toEqual(["/b.md"]);
+    expect((await t.search({ query: "PNG" })).hits.map((h) => h.path)).toEqual(["/b.md"]);
   });
 
   it("keeps the bytes across folder moves, deletion and restore", () => {

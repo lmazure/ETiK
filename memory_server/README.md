@@ -18,7 +18,8 @@ One container exposes the same core through:
 | Partial edits by **unique string replace** and **heading anchor**, not by line number | Line numbers go stale between calls; "append to `## UI pages`" is one call. |
 | **Literal writes**: the store keeps exactly what the model sends | The instructions, not the store, decide what a fact looks like (unlike stores where an LLM extracts and rewrites facts). |
 | Each document carries a one-line **description** returned by `memory_list` | A model-maintained index file drifts; descriptions make the index derivable. An index document can still be kept if the instructions want one. |
-| **Keyword search** first | It answers "where is endpoint X already recorded" exactly. Semantic search is a later addition. |
+| **Keyword, semantic and hybrid search** | Keyword answers "where is endpoint X already recorded" exactly; semantic finds a fact recorded in other words (or in another language, with the multilingual model); hybrid combines both. |
+| Embeddings from a **small local model** (E5, in-process; English by default, multilingual on request), one vector per **section** | No API key, no network at runtime, the memory never leaves the host; a section hit leads straight to `memory_read(section)`. The English model takes a third of the memory of the multilingual one. |
 | **Optimistic concurrency**, **atomic batch**, **history** | Several agents may write the same store; "create the file and its index row in the same step"; trace a fact back, undo a bad consolidation. |
 | **Store fixed by the harness**, never by tool arguments | Keeps the model from writing to the wrong project; paths stay short. |
 | No notion of entity, source tag or test session in the tools | That is policy and stays in the agent instructions, which can change without touching the tools. |
@@ -41,7 +42,7 @@ One container exposes the same core through:
 | --- | --- |
 | `memory_list` | List folders and documents under a path, to a depth, with version, size, date, tags and description, without reading content. Filter by tags; paginated. |
 | `memory_read` | Read a document whole, one `section`, or a `view_range`; returns numbered lines, metadata and version. `version` reads a past version. An image is returned as an image. |
-| `memory_search` | Search document content: `keyword` (case-insensitive literal) or `regex`; filters on `path_prefix` (a folder or a document), tags and metadata. Returns path, line, enclosing section, snippet, score. `semantic` and `hybrid` are rejected for now. |
+| `memory_search` | Search document content: `keyword` (case-insensitive literal) or `regex`, line by line; `semantic` (by meaning) or `hybrid` (meaning and words), section by section. Filters on `path_prefix` (a folder or a document), tags and metadata. Returns path, line (a line range for sections), enclosing section, snippet, score. See [`API.md`](API.md#memory_search). |
 | `memory_write` | `create` a document (fails if it exists) or `overwrite` it (fails if it does not), with optional metadata; `append_only` at creation; `encoding: "base64"` for a binary document. |
 | `memory_edit` | Apply operations to one document, in order, all or nothing: `str_replace` (unique unless `replace_all`), `append` / `prepend` (whole document or a `section`, optionally `create_section`), `insert` (after a line), `replace_section`, `set_metadata` (merge; `null` removes a key). |
 | `memory_move` | Rename or move a document or a folder; `overwrite` to replace an existing target. |
@@ -81,7 +82,7 @@ To try the tools interactively, run `npx @modelcontextprotocol/inspector@latest`
 | --- | --- |
 | `memory_list` | One line per entry: `path · version · size · updated · [media type] · [append-only] · [tags] · description`; folders as `path/ · N documents`; a `next_offset` when truncated |
 | `memory_read` | Header (path, version, metadata, line range), then `line_number<TAB>text`; a truncation notice telling which `view_range` to read next. For a binary document: the header, then the image itself when it is an image under the size limit |
-| `memory_search` | One block per hit: `path:line · section · score`, then the snippet |
+| `memory_search` | One block per hit: `path:line · section · score` (`path:from-to` for a section), then the snippet |
 | Write tools | `OK path version=N`; for edits, the changed lines with their numbers so the model can check the result |
 
 Typical errors: `old_str found 2 times (lines 12, 40); make it unique or set replace_all` · `Section '## UI pages' not found in /x.md; existing sections: ## Docs, ## Business rules` · `Version conflict on /x.md: expected 7, current 9; re-read and retry` · `Path exists: /x.md (version 3); use mode 'overwrite'`.
@@ -93,6 +94,7 @@ Nothing is ever overwritten or deleted:
 - `versions` holds a full snapshot (content or bytes, description, tags, metadata, path) for every version of every document. It is append-only, enforced by SQLite triggers. An append-only document also gets a full snapshot per addition: a log of 50 KB on average appended 300 times takes about 15 MB.
 - `changesets` records, for each tool call or batch, the actor (token) and the change note.
 - `documents` is the only mutable table: it points to the head version of each document and keeps a stable id across moves. It also holds what is fixed at creation: the append-only flag and the media type of a binary document.
+- `embeddings` is a cache for semantic search, outside the history: one vector (384 floats, 1.5 KB) per model and chunk text. Unchanged chunks are shared by all versions and moves; vectors of chunks that no longer exist are kept. Deleting its rows is harmless: they are computed again.
 
 Deleting is a soft delete: the document leaves listings and its path is free again, but all its versions stay; the admin can restore it.
 
@@ -118,6 +120,16 @@ curl http://localhost:9501/health
 
 Data is kept in the `memory-data` volume (`/data/memory.db`, SQLite).
 
+The model of semantic search is chosen when the image is built, with `MEMORY_EMBEDDING_MODEL` in `.env` (rebuild after a change). It is fetched at build time, and the container never downloads at runtime. Measured on a store of 155 documents:
+
+| `MEMORY_EMBEDDING_MODEL` | Model | Image | RAM | Semantic search |
+| --- | --- | --- | --- | --- |
+| `english` (default) | `Xenova/e5-small-v2` | 410 MB | about 270 MB | English |
+| `multilingual` | `Xenova/multilingual-e5-small` | 510 MB | about 700 MB | Also across languages, e.g. an English question finds a French passage |
+| `none` | — | 375 MB | about 80 MB | Disabled: `semantic` and `hybrid` give `UNSUPPORTED` |
+
+The multilingual model's memory is mostly its 250,000-word vocabulary; it is loaded at startup and kept. After a change of model, the stores are indexed again at startup (about 13 s for that store). Another Hugging Face model with ONNX weights can be given by its id, e.g. `Xenova/multilingual-e5-base`, which ranks a little better than `multilingual` and is twice as large and slow.
+
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `MEMORY_ADMIN_TOKEN` | — | Token reaching every store and the admin routes |
@@ -130,6 +142,9 @@ Data is kept in the `memory-data` volume (`/data/memory.db`, SQLite).
 | `MEMORY_MCP_MAX_OUTPUT_CHARS` | `40000` | MCP read results beyond this are truncated with a notice |
 | `MEMORY_MCP_MAX_IMAGE_BYTES` | `1048576` | Largest image `memory_read` returns as an image; bigger ones are only described |
 | `MEMORY_WEB_ROOT` | `dist/web` next to the server | Built web app; not served when absent |
+| `MEMORY_EMBEDDING_MODEL` | `english` | Model of semantic search: `english` (`Xenova/e5-small-v2`), `multilingual` (`Xenova/multilingual-e5-small`), another Hugging Face model with ONNX weights, or `none` to disable the `semantic` and `hybrid` modes. In Docker, a build argument |
+| `MEMORY_MODEL_DIR` | transformers.js cache; `/app/models` in the image | Where the model is cached |
+| `MEMORY_MODEL_DOWNLOAD` | `true`; `false` in the image | Whether a model missing from `MEMORY_MODEL_DIR` may be downloaded |
 | `LOG_LEVEL` | `info` | Fastify log level |
 
 At least one token must be set, otherwise the server refuses to start.
@@ -166,6 +181,7 @@ curl -H "Authorization: Bearer $TOKEN" -o login.png $B/files/sessions/042/log/lo
 
 curl "${H[@]}" "$B/list?path=/&depth=2"
 curl "${H[@]}" -X POST $B/search -d '{"query":"assumed"}'
+curl "${H[@]}" -X POST $B/search -d '{"query":"can a requirement linked to a test case be deleted?","mode":"hybrid"}'
 curl "${H[@]}" $B/history/entities/requirement.md
 ```
 
@@ -182,7 +198,7 @@ Open `http://localhost:9501/` and paste the viewer token (it stays in the tab, o
 - **History** (right): every version of the open document; open any version, diff it with the previous one, or tick two versions and compare them.
 - **Diff**: path, description, tags and metadata changes, then a line diff with folded unchanged parts (the two images side by side for a binary document).
 - **Activity** (left tab): the store's changes, newest first, one entry per write call or batch; a click opens the diff introduced.
-- **Search** (top): keyword search; a hit opens the document at the matching line.
+- **Search** (top): keyword, semantic or hybrid search (the selector next to the box); a hit opens the document at the matching line, or at the first line of the matching section.
 
 While the page is open, it checks the change feed every 3 seconds (30 s when the tab is hidden). New changes are **announced, never applied to what you are reading**:
 
@@ -205,7 +221,7 @@ The test container (`../test_environment/`) uses the store `squashtm`, through t
 
 ## Not done yet
 
-- Semantic and hybrid search (embeddings).
+- Pruning the vectors of chunks that no longer exist (they only take space).
 - Web app actions: editing, restoring a version or a deleted document (the app is read-only).
 - A CLI on `/api` for harnesses without MCP (e.g. Pi), with no change to the core or the tool definitions.
 - If a single tool is preferred over nine: one `memory` tool with a `command` enum, keeping Anthropic's command names (`view`, `create`, `str_replace`, `insert`, `delete`, `rename`) and adding `search`, `append`, `replace_section`, `set_metadata`, `batch`, `history`.
@@ -216,14 +232,15 @@ Requires Node 24.
 
 ```bash
 npm install
-npm test           # core, REST, MCP (SDK client over HTTP), web app logic and Markdown rendering
+npm test           # core, REST, MCP (SDK client over HTTP), web app logic and Markdown rendering; semantic search with a fake model
+MEMORY_TEST_REAL_MODEL=1 MEMORY_MODEL_DIR=models npx vitest run test/embedding   # both real models (downloaded once into models/)
 npm run typecheck  # server and web app
 npm run build      # server into dist/, web app into dist/web
 MEMORY_ADMIN_TOKEN=dev MEMORY_VIEWER_TOKEN=view MEMORY_DB_PATH=./data/memory.db npm run dev
 npm run dev:web    # web app with hot reload on http://localhost:5173, proxying /api to the server
 ```
 
-End-to-end tests of the web app (Playwright, against the built server on an in-memory database). Chromium needs system libraries, so the simplest is the Playwright image:
+End-to-end tests of the web app (Playwright, against the built server on an in-memory database; the first run downloads the embedding model into `models/`). Chromium needs system libraries, so the simplest is the Playwright image:
 
 ```bash
 npm run build
@@ -231,4 +248,4 @@ docker run --rm --network host -v "$PWD":/app -w /app -u "$(id -u):$(id -g)" -e 
   mcr.microsoft.com/playwright:v1.63.0-noble npx playwright test
 ```
 
-Layout: `src/schemas.ts` holds the tool schemas (single source for MCP, REST validation and OpenAPI); `src/core/` holds every rule (`memory-core.ts`) on top of SQLite (`db.ts`, `repository.ts`); `src/api/` and `src/mcp/` only translate and format. The web app is in `web/` (Preact, Vite): pure logic in `web/src/{tree,routes,diffs,markdown}.ts`, components in `web/src/components/`.
+Layout: `src/schemas.ts` holds the tool schemas (single source for MCP, REST validation and OpenAPI); `src/core/` holds every rule (`memory-core.ts`) on top of SQLite (`db.ts`, `repository.ts`), and semantic search (`chunks.ts`, `semantic.ts`, behind the `Embedder` interface of `embedder.ts`); `src/embedding/` runs the model (transformers.js); `src/api/` and `src/mcp/` only translate and format. The web app is in `web/` (Preact, Vite): pure logic in `web/src/{tree,routes,diffs,markdown}.ts`, components in `web/src/components/`.

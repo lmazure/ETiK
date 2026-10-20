@@ -7,6 +7,8 @@ export type DB = Database.Database;
  * adds a full snapshot. `documents` only holds the head pointer of each document, and what is fixed at its
  * creation: the append-only flag and, for a binary document, its media type (`content_type`, NULL for text).
  * A binary version keeps its bytes in `data` and an empty `content`.
+ * `embeddings` is a cache for semantic search, outside the history: one vector per model and chunk text
+ * (SHA-256 of the text), shared by every version, move or restore that keeps the chunk; it can be dropped at any time.
  * Each later schema change is a new entry, applied once to existing databases (`user_version`).
  */
 const MIGRATIONS: string[] = [
@@ -65,6 +67,14 @@ const MIGRATIONS: string[] = [
     BEGIN SELECT RAISE(ABORT, 'changesets are append-only'); END;
   CREATE TRIGGER changesets_no_delete BEFORE DELETE ON changesets
     BEGIN SELECT RAISE(ABORT, 'changesets are append-only'); END;
+  `,
+  `
+  CREATE TABLE embeddings (
+    model  TEXT NOT NULL,
+    hash   TEXT NOT NULL,
+    vector BLOB NOT NULL,
+    PRIMARY KEY (model, hash)
+  ) WITHOUT ROWID;
   `,
 ];
 

@@ -4,3 +4,4 @@ data/
 .env
 test-results/
 playwright-report/
+models/

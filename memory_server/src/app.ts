@@ -7,6 +7,7 @@ import { errorHandler, registerRest } from "./api/rest.js";
 import { Authenticator } from "./auth.js";
 import type { Config } from "./config.js";
 import type { DB } from "./core/db.js";
+import type { Embedder } from "./core/embedder.js";
 import { MemoryCore } from "./core/memory-core.js";
 import { registerMcp } from "./mcp/server.js";
 
@@ -21,18 +22,27 @@ export const SECURITY_HEADERS: Record<string, string> = {
   "Referrer-Policy": "no-referrer",
 };
 
+export interface AppDependencies {
+  /** Model of the semantic and hybrid search modes; without one, they are refused. */
+  embedder?: Embedder | undefined;
+}
+
 /**
  * Builds the HTTP application: `/api` (REST), `/mcp` (MCP Streamable HTTP), `/health`,
  * and the web app at `/` when it has been built. All on one core.
  */
-export function buildApp(config: Config, db: DB, options: FastifyServerOptions = {}): FastifyInstance {
-  const core = new MemoryCore(db, { maxDocumentBytes: config.maxDocumentBytes, maxFileBytes: config.maxFileBytes });
-  const auth = new Authenticator(config);
+export function buildApp(config: Config, db: DB, options: FastifyServerOptions = {}, deps: AppDependencies = {}): FastifyInstance {
   const app = Fastify({
     // A text document plus JSON escaping, or a binary one in base64, and the other fields of the request.
     bodyLimit: Math.max(config.maxDocumentBytes * 2, Math.ceil(config.maxFileBytes / 3) * 4) + 64 * 1024,
     ...options,
   });
+  const core = new MemoryCore(db, {
+    maxDocumentBytes: config.maxDocumentBytes, maxFileBytes: config.maxFileBytes, embedder: deps.embedder, logger: app.log,
+  });
+  const auth = new Authenticator(config);
+  app.addHook("onReady", async () => core.warmUpSemanticSearch());
+  app.addHook("onClose", async () => core.close());
   app.setErrorHandler(errorHandler);
   app.addHook("onSend", async (_request, reply, payload) => {
     for (const [name, value] of Object.entries(SECURITY_HEADERS)) reply.header(name, value);
