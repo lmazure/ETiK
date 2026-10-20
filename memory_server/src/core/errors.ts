@@ -5,6 +5,7 @@ export type ErrorCode =
   | "ALREADY_EXISTS"
   | "IS_FOLDER"
   | "VERSION_CONFLICT"
+  | "APPEND_ONLY"
   | "NOT_UNIQUE"
   | "NO_MATCH"
   | "SECTION_NOT_FOUND"

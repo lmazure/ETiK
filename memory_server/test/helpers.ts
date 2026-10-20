@@ -19,21 +19,25 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     viewerToken: VIEWER_TOKEN,
     agentTokens: [{ store: "squashtm", token: AGENT_TOKEN }, { store: "other", token: OTHER_TOKEN }],
     maxDocumentBytes: 10_000,
+    maxFileBytes: 20_000,
     mcpMaxOutputChars: 2_000,
+    mcpMaxImageBytes: 1_000,
     webRoot: undefined,
     ...overrides,
   };
 }
 
 /** A core on a fresh in-memory database, with helpers that parse raw arguments like the entry points do. */
-export function testCore(maxDocumentBytes = 10_000) {
+export function testCore(maxDocumentBytes = 10_000, maxFileBytes = 20_000) {
   const db = openDatabase(":memory:");
-  const core = new MemoryCore(db, { maxDocumentBytes });
+  const core = new MemoryCore(db, { maxDocumentBytes, maxFileBytes });
   const ctx: Context = { store: "squashtm", actor: "agent:squashtm" };
+  const admin: Context = { store: "squashtm", actor: "admin", admin: true };
   return {
     db,
     core,
     ctx,
+    admin,
     list: (args: unknown = {}, c = ctx) => core.list(c, listArgs.parse(args)),
     read: (args: unknown, c = ctx) => core.read(c, readArgs.parse(args)),
     search: (args: unknown, c = ctx) => core.search(c, searchArgs.parse(args)),
@@ -44,3 +48,7 @@ export function testCore(maxDocumentBytes = 10_000) {
     history: (args: unknown, c = ctx) => core.history(c, historyArgs.parse(args)),
   };
 }
+
+/** A real 1×1 PNG. */
+export const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");

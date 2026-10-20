@@ -16,7 +16,7 @@ import { registerMcp } from "./mcp/server.js";
  */
 export const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy":
-    "default-src 'self'; img-src 'self' data:; style-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
 };
@@ -26,11 +26,11 @@ export const SECURITY_HEADERS: Record<string, string> = {
  * and the web app at `/` when it has been built. All on one core.
  */
 export function buildApp(config: Config, db: DB, options: FastifyServerOptions = {}): FastifyInstance {
-  const core = new MemoryCore(db, { maxDocumentBytes: config.maxDocumentBytes });
+  const core = new MemoryCore(db, { maxDocumentBytes: config.maxDocumentBytes, maxFileBytes: config.maxFileBytes });
   const auth = new Authenticator(config);
   const app = Fastify({
-    // A document plus JSON escaping and the other fields of the request.
-    bodyLimit: config.maxDocumentBytes * 2 + 64 * 1024,
+    // A text document plus JSON escaping, or a binary one in base64, and the other fields of the request.
+    bodyLimit: Math.max(config.maxDocumentBytes * 2, Math.ceil(config.maxFileBytes / 3) * 4) + 64 * 1024,
     ...options,
   });
   app.setErrorHandler(errorHandler);
@@ -41,8 +41,8 @@ export function buildApp(config: Config, db: DB, options: FastifyServerOptions =
   app.get("/health", { logLevel: "warn" }, async () => ({ status: "ok" }));
   const openApi = openApiDocument();
   app.get("/api/openapi.json", async () => openApi);
-  registerRest(app, core, auth);
-  registerMcp(app, core, auth, config.mcpMaxOutputChars);
+  registerRest(app, core, auth, config.maxFileBytes);
+  registerMcp(app, core, auth, { maxOutputChars: config.mcpMaxOutputChars, maxImageBytes: config.mcpMaxImageBytes });
   if (config.webRoot && existsSync(join(config.webRoot, "index.html"))) {
     app.register(fastifyStatic, { root: config.webRoot, prefix: "/", index: "index.html" });
   }

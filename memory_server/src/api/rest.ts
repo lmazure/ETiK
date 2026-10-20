@@ -2,10 +2,11 @@ import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from
 import { z } from "zod";
 import { AuthError, headerValue, type Authenticator } from "../auth.js";
 import { MemoryError, type ErrorCode } from "../core/errors.js";
-import { formatZodError, type Context, type MemoryCore } from "../core/memory-core.js";
+import { MEDIA_TYPES } from "../core/media.js";
+import { formatZodError, type Context, type FileResult, type MemoryCore } from "../core/memory-core.js";
 import {
-  batchArgs, changesArgs, deleteArgs, docHistoryArgs, docIdArgs, docVersionArgs, editArgs, historyArgs, listArgs, moveArgs, readArgs,
-  restoreArgs, searchArgs, writeArgs,
+  batchArgs, changesArgs, deleteArgs, docHistoryArgs, docIdArgs, docVersionArgs, editArgs, fileArgs, fileWriteArgs, historyArgs, listArgs,
+  moveArgs, readArgs, restoreArgs, searchArgs, writeArgs,
 } from "../schemas.js";
 
 const STATUS: Record<ErrorCode, number> = {
@@ -16,6 +17,7 @@ const STATUS: Record<ErrorCode, number> = {
   ALREADY_EXISTS: 409,
   IS_FOLDER: 409,
   VERSION_CONFLICT: 412,
+  APPEND_ONLY: 409,
   TOO_LARGE: 413,
   NO_MATCH: 422,
   NOT_UNIQUE: 422,
@@ -62,7 +64,7 @@ function list(value: string | undefined): string[] | undefined {
 function body(request: FastifyRequest): Record<string, unknown> {
   const value = request.body;
   if (value === undefined || value === null) return {};
-  if (typeof value !== "object" || Array.isArray(value)) {
+  if (typeof value !== "object" || Array.isArray(value) || Buffer.isBuffer(value)) {
     throw new MemoryError("INVALID_ARGUMENT", "The request body must be a JSON object");
   }
   return value as Record<string, unknown>;
@@ -79,7 +81,32 @@ function ifMatch(request: FastifyRequest): number | undefined {
 
 const etag = (version: number) => `"${version}"`;
 
-export function registerRest(app: FastifyInstance, core: MemoryCore, auth: Authenticator): void {
+const mediaTypes = [...new Set(Object.values(MEDIA_TYPES))];
+
+/** `If-None-Match: *` creates; otherwise the document is overwritten, with `If-Match` as the expected version. */
+function writeMode(request: FastifyRequest): { mode: "create" | "overwrite"; if_version: number | undefined } {
+  const create = headerValue(request.headers["if-none-match"])?.trim() === "*";
+  const ifVersion = ifMatch(request);
+  if (create && ifVersion !== undefined) {
+    throw new MemoryError("INVALID_ARGUMENT", "Use either If-None-Match: * (create) or If-Match (overwrite), not both");
+  }
+  return { mode: create ? "create" : "overwrite", if_version: ifVersion };
+}
+
+/** The bytes of a binary document; past versions get no ETag, like document reads. */
+function sendFile(reply: FastifyReply, file: FileResult) {
+  if (file.version === file.current_version) reply.header("ETag", etag(file.version));
+  return reply
+    .header("Content-Type", file.content_type)
+    .header("Content-Disposition", "inline")
+    .header("Cache-Control", "private, no-cache")
+    .send(file.data);
+}
+
+export function registerRest(app: FastifyInstance, core: MemoryCore, auth: Authenticator, maxFileBytes: number): void {
+  // The body of PUT .../files/... is the file itself.
+  app.addContentTypeParser(mediaTypes, { parseAs: "buffer", bodyLimit: maxFileBytes }, (_request, data, done) => done(null, data));
+
   /** Context of a read; `write` also requires a token allowed to write. */
   const context = (request: FastifyRequest, write = false): Context => {
     const principal = auth.authenticate(request.headers.authorization);
@@ -112,20 +139,18 @@ export function registerRest(app: FastifyInstance, core: MemoryCore, auth: Authe
     const { lines, ...result } = core.read(ctx, readArgs.parse({
       path: docPath(request), section: q.section, view_range: viewRange, version: num(q.version),
     }));
+    if (result.content_type !== undefined) {
+      throw new MemoryError("INVALID_ARGUMENT",
+        `${result.path} is a binary document (${result.content_type}); download it with GET /api/stores/${ctx.store}/files${result.path}`,
+        { path: result.path, content_type: result.content_type });
+    }
     if (!result.is_past_version) reply.header("ETag", etag(result.version));
     return { ...result, content: lines.length === 0 ? "" : lines.join("\n") + "\n" };
   });
 
   app.put("/api/stores/:store/docs/*", async (request, reply) => {
     const ctx = writeContext(request);
-    const create = headerValue(request.headers["if-none-match"])?.trim() === "*";
-    const ifVersion = ifMatch(request);
-    if (create && ifVersion !== undefined) {
-      throw new MemoryError("INVALID_ARGUMENT", "Use either If-None-Match: * (create) or If-Match (overwrite), not both");
-    }
-    const result = core.write(ctx, writeArgs.parse({
-      ...body(request), path: docPath(request), mode: create ? "create" : "overwrite", if_version: ifVersion,
-    }));
+    const result = core.write(ctx, writeArgs.parse({ ...body(request), path: docPath(request), ...writeMode(request) }));
     reply.header("ETag", etag(result.version));
     if (result.created) reply.status(201);
     return result;
@@ -145,6 +170,28 @@ export function registerRest(app: FastifyInstance, core: MemoryCore, auth: Authe
     return core.delete(ctx, deleteArgs.parse({
       path: docPath(request), recursive: bool(q.recursive), if_version: ifMatch(request), change_note: q.change_note,
     }));
+  });
+
+  app.get("/api/stores/:store/files/*", async (request, reply) => {
+    const ctx = context(request);
+    const q = request.query as Query;
+    return sendFile(reply, core.readFile(ctx, fileArgs.parse({ path: docPath(request), version: num(q.version) })));
+  });
+
+  app.put("/api/stores/:store/files/*", async (request, reply) => {
+    const ctx = writeContext(request);
+    if (!Buffer.isBuffer(request.body)) {
+      throw new MemoryError("INVALID_ARGUMENT", `The body must be the file itself, sent with Content-Type ${mediaTypes.join(", ")}`);
+    }
+    const q = request.query as Query;
+    const args = fileWriteArgs.parse({
+      path: docPath(request), ...writeMode(request), description: q.description, tags: list(q.tags), change_note: q.change_note,
+    });
+    const contentType = headerValue(request.headers["content-type"])?.split(";")[0]!.trim().toLowerCase();
+    const result = core.writeFile(ctx, { ...args, data: request.body, content_type: contentType });
+    reply.header("ETag", etag(result.version));
+    if (result.created) reply.status(201);
+    return result;
   });
 
   app.post("/api/stores/:store/search", async (request) => core.search(context(request), searchArgs.parse(body(request))));
@@ -182,6 +229,12 @@ export function registerRest(app: FastifyInstance, core: MemoryCore, auth: Authe
     const ctx = context(request);
     const { version } = request.params as { version: string };
     return core.versionById(ctx, docVersionArgs.parse({ doc_id: docId(request), version: num(version) }));
+  });
+
+  app.get("/api/stores/:store/documents/:id/versions/:version/file", async (request, reply) => {
+    const ctx = context(request);
+    const { version } = request.params as { version: string };
+    return sendFile(reply, core.fileById(ctx, docVersionArgs.parse({ doc_id: docId(request), version: num(version) })));
   });
 
   app.post("/api/stores/:store/restore", async (request, reply) => {

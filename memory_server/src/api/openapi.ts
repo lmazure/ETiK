@@ -1,5 +1,8 @@
 import { z } from "zod";
+import { MEDIA_TYPES } from "../core/media.js";
 import { batchArgs, editArgs, moveArgs, restoreArgs, searchArgs, tools, writeArgs } from "../schemas.js";
+
+const mediaTypes = [...new Set(Object.values(MEDIA_TYPES))];
 
 const json = (schema: z.ZodType) => z.toJSONSchema(schema, { io: "input", unrepresentable: "any" });
 
@@ -19,6 +22,10 @@ const header = (name: string, description: string) =>
 const ifMatch = header("If-Match", "Expected current version, e.g. \"7\"; 412 if it differs.");
 
 const ok = (description: string) => ({ description, content: { "application/json": { schema: { type: "object" } } } });
+const binary = { type: "string", format: "binary" };
+const file = (description: string) => ({
+  description, content: Object.fromEntries(mediaTypes.map((type) => [type, { schema: binary }])),
+});
 const errors = {
   "400": { $ref: "#/components/responses/Error" },
   "401": { $ref: "#/components/responses/Error" },
@@ -83,6 +90,11 @@ export function openApiDocument(): Record<string, unknown> {
           parameters: [store, docIdParam, { name: "version", in: "path", required: true, schema: { type: "integer" } }],
           responses: { "200": ok("Version"), ...errors } },
       },
+      "/api/stores/{store}/documents/{id}/versions/{version}/file": {
+        get: { summary: "The bytes of one version of a binary document by id, live or deleted",
+          parameters: [store, docIdParam, { name: "version", in: "path", required: true, schema: { type: "integer" } }],
+          responses: { "200": file("The file, with its media type"), ...errors } },
+      },
       "/api/stores/{store}/list": {
         get: {
           summary: tools.memory_list.description,
@@ -110,13 +122,30 @@ export function openApiDocument(): Record<string, unknown> {
           summary: tools.memory_edit.description,
           parameters: [store, docPath, ifMatch],
           requestBody: jsonBody(editArgs.omit({ path: true })),
-          responses: { "200": ok("Edited"), "412": { $ref: "#/components/responses/Error" },
+          responses: { "200": ok("Edited"), "409": { $ref: "#/components/responses/Error" }, "412": { $ref: "#/components/responses/Error" },
             "422": { $ref: "#/components/responses/Error" }, ...errors },
         },
         delete: {
           summary: tools.memory_delete.description,
           parameters: [store, docPath, ifMatch, query("recursive", "boolean"), query("change_note", "string")],
           responses: { "200": ok("Deleted"), "409": { $ref: "#/components/responses/Error" }, ...errors },
+        },
+      },
+      "/api/stores/{store}/files/{path}": {
+        get: {
+          summary: "Download a binary document (image, video)",
+          parameters: [store, docPath, query("version", "integer", "A past version; default: the current one")],
+          responses: { "200": file("The file, with its media type and, for the current version, an ETag header"), ...errors },
+        },
+        put: {
+          summary: "Create or overwrite a binary document from the raw bytes of the body; its extension decides its media type",
+          parameters: [store, docPath, ifMatch,
+            header("If-None-Match", "'*' to create; without it the document is overwritten and must exist."),
+            query("description", "string"), query("tags", "string", "Comma-separated"), query("change_note", "string")],
+          requestBody: { required: true, content: Object.fromEntries(mediaTypes.map((type) => [type, { schema: binary }])) },
+          responses: { "200": ok("Overwritten"), "201": ok("Created"), "409": { $ref: "#/components/responses/Error" },
+            "412": { $ref: "#/components/responses/Error" }, "413": { $ref: "#/components/responses/Error" },
+            "415": { $ref: "#/components/responses/Error" }, ...errors },
         },
       },
       "/api/stores/{store}/search": {

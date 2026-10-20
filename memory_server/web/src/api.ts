@@ -80,7 +80,20 @@ async function request<T>(method: "GET" | "POST", path: string, params?: Record<
   return json as T;
 }
 
+/** The bytes of a binary document. */
+async function requestFile(path: string): Promise<Blob> {
+  const response = await fetch(path, { headers: { ...(token && { Authorization: `Bearer ${token}` }) } });
+  if (!response.ok) {
+    if (response.status === 401) onUnauthorized();
+    const json = await response.json().catch(() => undefined);
+    const error = (json as { error?: { code?: string; message?: string } } | undefined)?.error;
+    throw new ApiError(response.status, error?.code ?? "HTTP_" + response.status, error?.message ?? response.statusText);
+  }
+  return response.blob();
+}
+
 const storePath = (store: string) => `/api/stores/${encodeURIComponent(store)}`;
+const encodePath = (path: string) => path.split("/").map(encodeURIComponent).join("/");
 
 /** Every live document of a store. Listings stop at depth 5, so deeper folders are listed in turn. */
 async function listAll(store: string): Promise<DocumentEntry[]> {
@@ -113,6 +126,11 @@ export const api = {
     request<DocumentHistoryResult>("GET", `${storePath(store)}/documents/${id}/history`, { limit: 500 }),
   version: (store: string, id: number, version: number) =>
     request<VersionResult>("GET", `${storePath(store)}/documents/${id}/versions/${version}`),
+  /** Current bytes of a binary document, by path. */
+  file: (store: string, path: string) => requestFile(`${storePath(store)}/files${encodePath(path)}`),
+  /** Bytes of one version of a binary document, by id. */
+  versionFile: (store: string, id: number, version: number) =>
+    requestFile(`${storePath(store)}/documents/${id}/versions/${version}/file`),
   search: (store: string, query: string, offset = 0) =>
     request<SearchResult>("POST", `${storePath(store)}/search`, undefined, { query, mode: "keyword", limit: 100, offset }),
 };

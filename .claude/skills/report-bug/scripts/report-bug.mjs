@@ -1,14 +1,13 @@
 import { spawn } from "child_process";
-import { existsSync, readFileSync } from "fs";
 import { release } from "os";
-import { basename, dirname, extname, resolve } from "path";
+import { posix } from "path";
 import { parseArgs } from "util";
 
 const GITLAB_URL = "https://gitlab.com";
 const PROJECT    = "henixdevelopment/squash/squash-tm/core/squashtest-tm-staging";
 const PRIORITIES = ["Highest", "High", "Medium", "Low", "Lowest"];
 
-const USAGE = "Usage: report-bug.mjs <file.md> --priority <Highest|High|Medium|Low|Lowest> [--security] [--draft] [--display]";
+const USAGE = "Usage: report-bug.mjs <memory path of bug.md> --memory-url <url> --store <store> --priority <Highest|High|Medium|Low|Lowest> [--security] [--draft] [--display]";
 
 const MEDIA_TYPES = { ".png": "image/png", ".webm": "video/webm" };
 
@@ -26,6 +25,8 @@ function parseCli() {
       allowPositionals: true,
       strict: true,
       options: {
+        "memory-url": { type: "string" },
+        store:    { type: "string" },
         priority: { type: "string" },
         security: { type: "boolean", default: false },
         draft:    { type: "boolean", default: false },
@@ -37,10 +38,13 @@ function parseCli() {
   }
   const { values, positionals } = parsed;
 
-  if (positionals.length !== 1) fail(`expected exactly one Markdown file\n${USAGE}`);
+  if (positionals.length !== 1) fail(`expected exactly one memory path\n${USAGE}`);
   const file = positionals[0];
-  if (!file.toLowerCase().endsWith(".md")) fail(`not a Markdown file (.md expected): ${file}`);
-  if (!existsSync(file)) fail(`file not found: ${file}`);
+  if (!file.startsWith("/")) fail(`not an absolute memory path (e.g. /sessions/042/bugs/007/bug.md): ${file}`);
+  if (!file.toLowerCase().endsWith(".md")) fail(`not a Markdown document (.md expected): ${file}`);
+
+  if (!values["memory-url"]) fail(`--memory-url is required\n${USAGE}`);
+  if (!values.store) fail(`--store is required\n${USAGE}`);
 
   if (!values.priority) fail(`--priority is required\n${USAGE}`);
   const priority = PRIORITIES.find(p => p.toLowerCase() === values.priority.toLowerCase());
@@ -48,8 +52,41 @@ function parseCli() {
 
   const token = process.env.GITLAB_TOKEN;
   if (!token) fail("GITLAB_TOKEN environment variable is not set");
+  const memoryToken = process.env.MEMORY_TOKEN;
+  if (!memoryToken) fail("MEMORY_TOKEN environment variable is not set");
 
-  return { file, priority, token, security: values.security, draft: values.draft, display: values.display };
+  return {
+    file, priority, token, security: values.security, draft: values.draft, display: values.display,
+    memory: { url: values["memory-url"].replace(/\/+$/, ""), store: values.store, token: memoryToken },
+  };
+}
+
+/** GET on the store's REST API; fails with the server's message. */
+async function memoryGet(memory, route, what) {
+  let res;
+  try {
+    res = await fetch(`${memory.url}/api/stores/${encodeURIComponent(memory.store)}${route}`, {
+      headers: { Authorization: `Bearer ${memory.token}` },
+    });
+  } catch (e) {
+    fail(`memory server unreachable at ${memory.url}: ${e.cause?.message ?? e.message}`);
+  }
+  if (!res.ok) {
+    const json = await res.json().catch(() => undefined);
+    fail(`cannot read ${what} from the memory server (HTTP ${res.status}): ${json?.error?.message ?? res.statusText}`);
+  }
+  return res;
+}
+
+const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");
+
+async function readBug(memory, path) {
+  const { content } = await (await memoryGet(memory, `/docs${encodePath(path)}`, path)).json();
+  return content;
+}
+
+async function readMedia(memory, path) {
+  return Buffer.from(await (await memoryGet(memory, `/files${encodePath(path)}`, `referenced file ${path}`)).arrayBuffer());
 }
 
 function splitTitle(markdown, file) {
@@ -60,26 +97,26 @@ function splitTitle(markdown, file) {
   return { title: match[1].trim(), body: before + after };
 }
 
-function localMediaPath(target, baseDir) {
+/** Memory path of a referenced image or video, relative to the bug's folder or absolute; null for anything else. */
+function memoryMediaPath(target, baseDir) {
   const raw = target.startsWith("<") && target.endsWith(">") ? target.slice(1, -1) : target;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith("/")) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith("//")) return null;
   const path = decodeURIComponent(raw.split(/[?#]/)[0]);
-  if (!(extname(path).toLowerCase() in MEDIA_TYPES)) return null;
-  return resolve(baseDir, path);
+  if (!(posix.extname(path).toLowerCase() in MEDIA_TYPES)) return null;
+  const resolved = posix.normalize(path.startsWith("/") ? path : posix.join(baseDir, path));
+  if (!resolved.startsWith("/") || resolved.startsWith("/..")) fail(`referenced file outside the store: ${target}`);
+  return resolved;
 }
 
 function collectMedia(body, baseDir) {
   const paths = new Set();
   for (const m of body.matchAll(MD_MEDIA_RE)) {
-    const p = localMediaPath(m[2], baseDir);
+    const p = memoryMediaPath(m[2], baseDir);
     if (p) paths.add(p);
   }
   for (const m of body.matchAll(HTML_MEDIA_RE)) {
-    const p = localMediaPath(m[3], baseDir);
+    const p = memoryMediaPath(m[3], baseDir);
     if (p) paths.add(p);
-  }
-  for (const p of paths) {
-    if (!existsSync(p)) fail(`referenced file not found: ${p}`);
   }
   return [...paths];
 }
@@ -87,11 +124,11 @@ function collectMedia(body, baseDir) {
 function replaceMedia(body, baseDir, urls) {
   return body
     .replace(MD_MEDIA_RE, (all, pre, target, post) => {
-      const p = localMediaPath(target, baseDir);
+      const p = memoryMediaPath(target, baseDir);
       return p ? `${pre}${urls.get(p)}${post}` : all;
     })
     .replace(HTML_MEDIA_RE, (all, pre, quote, target) => {
-      const p = localMediaPath(target, baseDir);
+      const p = memoryMediaPath(target, baseDir);
       return p ? `${pre}${quote}${urls.get(p)}${quote}` : all;
     });
 }
@@ -119,9 +156,9 @@ async function gitlab(token, method, path, body) {
   return json;
 }
 
-async function uploadMedia(token, projectPath, file) {
+async function uploadMedia(token, projectPath, path, data) {
   const form = new FormData();
-  form.append("file", new Blob([readFileSync(file)], { type: MEDIA_TYPES[extname(file).toLowerCase()] }), basename(file));
+  form.append("file", new Blob([data], { type: MEDIA_TYPES[posix.extname(path).toLowerCase()] }), posix.basename(path));
   const { url } = await gitlab(token, "POST", `/projects/${projectPath}/uploads`, form);
   return url;
 }
@@ -168,9 +205,13 @@ function openInBrowser(url) {
 // ── Main ─────────────────────────────────────────────────────────────────────
 try {
   const opts = parseCli();
-  const baseDir = dirname(resolve(opts.file));
-  const { title, body } = splitTitle(readFileSync(opts.file, "utf-8"), opts.file);
-  const media = collectMedia(body, baseDir);
+  const baseDir = posix.dirname(opts.file);
+  const { title, body } = splitTitle(await readBug(opts.memory, opts.file), opts.file);
+  // Everything is read from the memory server before anything is created in GitLab.
+  const media = new Map();
+  for (const path of collectMedia(body, baseDir)) {
+    media.set(path, await readMedia(opts.memory, path));
+  }
 
   const labels = [
     "Type::Bug",
@@ -182,8 +223,8 @@ try {
 
   const projectPath = encodeURIComponent(PROJECT);
   const urls = new Map();
-  for (const file of media) {
-    urls.set(file, await uploadMedia(opts.token, projectPath, file));
+  for (const [path, data] of media) {
+    urls.set(path, await uploadMedia(opts.token, projectPath, path, data));
   }
 
   const description = `${replaceMedia(body, baseDir, urls).trimEnd()}\n\n${quickActions(labels, opts)}\n`;

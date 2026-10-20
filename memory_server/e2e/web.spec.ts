@@ -161,3 +161,28 @@ test("line numbers do not wrap next to long lines", async ({ page, request }) =>
   expect(await height(10)).toBeCloseTo(await height(9), 0);
   expect(await height(12)).toBeCloseTo(await height(9), 0);
 });
+
+test("a screenshot referenced by a log is shown in place, and on its own", async ({ page, request }) => {
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+  const uploaded = await request.put("/api/stores/squashtm/files/sessions/001/log/login.png", {
+    headers: { ...agent, "If-None-Match": "*", "Content-Type": "image/png" }, data: png,
+  });
+  expect(uploaded.status()).toBe(201);
+  const log = await request.put(`${docs}/sessions/001/log/log.md`, {
+    headers: { ...agent, "If-None-Match": "*" }, data: { file_text: "# Log\n\n![Login page](login.png)\n", append_only: true },
+  });
+  expect(log.status()).toBe(201);
+  await logIn(page);
+
+  await page.getByRole("link", { name: /log\.md/ }).click();
+  await expect(page.locator(".doc-header")).toContainText("append-only");
+  const inline = page.locator(".markdown img.memory-media");
+  await expect(inline).toHaveAttribute("src", /^blob:/);
+  expect(await inline.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+
+  await inline.click();
+  const media = page.locator("img.media");
+  await expect(media).toHaveAttribute("src", /^blob:/);
+  expect(await media.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+});

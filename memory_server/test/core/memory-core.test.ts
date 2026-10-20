@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MemoryError } from "../../src/core/errors.js";
 import { batchArgs, restoreArgs } from "../../src/schemas.js";
-import { testCore } from "../helpers.js";
+import { PNG, testCore } from "../helpers.js";
 
 function errorOf(fn: () => unknown): MemoryError {
   try {
@@ -267,5 +267,152 @@ describe("batch", () => {
     })));
     expect(error.code).toBe("INVALID_ARGUMENT");
     expect(error.message).toContain("Batch operation 1 (memory_write /c.md): invalid arguments");
+  });
+});
+
+describe("append-only documents", () => {
+  function withLog() {
+    const t = testCore();
+    t.write({ path: "/s/log.md", file_text: "# Log\n\n## Setup\ns1\n\n## Run\nr1\n", append_only: true });
+    return t;
+  }
+
+  it("accepts additions at the end and metadata changes", () => {
+    const t = withLog();
+    expect(t.edit({ path: "/s/log.md", operations: [{ op: "append", text: "r2" }] }).version).toBe(2);
+    expect(t.edit({ path: "/s/log.md", operations: [{ op: "append", section: "## Run", text: "r3" }] }).version).toBe(3);
+    expect(t.edit({ path: "/s/log.md", operations: [{ op: "append", section: "## Next", create_section: true, text: "n1" }] }).version).toBe(4);
+    expect(t.edit({ path: "/s/log.md", operations: [{ op: "set_metadata", description: "Log", tags: ["log"] }] }).version).toBe(5);
+    const current = t.read({ path: "/s/log.md" });
+    expect(t.write({ path: "/s/log.md", file_text: current.lines.join("\n") + "\nmore\n", mode: "overwrite" }).version).toBe(6);
+    expect(t.read({ path: "/s/log.md" })).toMatchObject({ append_only: true, description: "Log" });
+    expect(t.list().entries.find((e) => e.path === "/s")).toBeDefined();
+    expect(t.list({ path: "/s" }).entries[0]).toMatchObject({ path: "/s/log.md", append_only: true });
+  });
+
+  it("refuses any other change of the content", () => {
+    const t = withLog();
+    const refused: unknown[] = [
+      { op: "str_replace", old_str: "s1", new_str: "S1" },
+      { op: "str_replace", old_str: "r1", new_str: "R1" },
+      { op: "prepend", text: "x" },
+      { op: "insert", insert_line: 1, insert_text: "x" },
+      { op: "replace_section", section: "## Run", text: "r2" },
+      { op: "append", section: "## Setup", text: "s2" },
+    ];
+    for (const op of refused) {
+      const error = errorOf(() => t.edit({ path: "/s/log.md", operations: [op] }));
+      expect(error.code).toBe("APPEND_ONLY");
+      expect(error.message).toBe("/s/log.md is append-only: only additions at its end are accepted; add text with memory_edit op 'append' without section");
+    }
+    expect(errorOf(() => t.write({ path: "/s/log.md", file_text: "# Log\n", mode: "overwrite" })).code).toBe("APPEND_ONLY");
+    expect(t.read({ path: "/s/log.md" }).version).toBe(1);
+    // The rule is on the result: any operation that only adds at the end passes.
+    expect(t.edit({ path: "/s/log.md", operations: [{ op: "str_replace", old_str: "r1", new_str: "r1\nr2" }] }).version).toBe(2);
+  });
+
+  it("sets the flag only at creation", () => {
+    const t = withLog();
+    t.write({ path: "/a.md", file_text: "a\n" });
+    expect(errorOf(() => t.write({ path: "/a.md", file_text: "b\n", mode: "overwrite", append_only: true })).message)
+      .toBe("append_only can only be given when creating a document (mode 'create')");
+    expect(errorOf(() => t.write({ path: "/s/log.md", file_text: "x", mode: "overwrite", append_only: false })).code).toBe("INVALID_ARGUMENT");
+    expect(t.read({ path: "/a.md" }).append_only).toBe(false);
+  });
+
+  it("lets only the admin move or delete it, directly or through a folder", () => {
+    const t = withLog();
+    t.write({ path: "/s/notes.md", file_text: "n\n" });
+    t.write({ path: "/other.md", file_text: "o\n" });
+    const moved = errorOf(() => t.move({ old_path: "/s/log.md", new_path: "/s/log2.md" }));
+    expect(moved.code).toBe("APPEND_ONLY");
+    expect(moved.message).toBe("Cannot move or replace append-only document /s/log.md; only the admin can");
+    expect(errorOf(() => t.move({ old_path: "/other.md", new_path: "/s/log.md", overwrite: true })).code).toBe("APPEND_ONLY");
+    expect(errorOf(() => t.move({ old_path: "/s", new_path: "/t" })).code).toBe("APPEND_ONLY");
+    expect(errorOf(() => t.remove({ path: "/s/log.md" })).message).toBe("Cannot delete append-only document /s/log.md; only the admin can");
+    expect(errorOf(() => t.remove({ path: "/s", recursive: true })).code).toBe("APPEND_ONLY");
+    expect(t.list({ path: "/", depth: 5 }).total).toBe(4); // folder /s, and its two documents, and /other.md
+
+    expect(t.move({ old_path: "/s", new_path: "/t" }, t.admin).moved).toHaveLength(2);
+    expect(t.remove({ path: "/t/log.md" }, t.admin).deleted).toHaveLength(1);
+    const [deleted] = t.core.listDeleted(t.admin);
+    t.core.restore(t.admin, restoreArgs.parse({ doc_id: deleted!.doc_id }));
+    expect(t.read({ path: "/t/log.md" }).append_only).toBe(true);
+  });
+
+  it("rolls a batch back when an operation breaks the rule", () => {
+    const t = withLog();
+    const error = errorOf(() => t.core.batch(t.ctx, batchArgs.parse({
+      operations: [
+        { tool: "memory_edit", arguments: { path: "/s/log.md", operations: [{ op: "append", text: "ok" }] } },
+        { tool: "memory_delete", arguments: { path: "/s/log.md" } },
+      ],
+    })));
+    expect(error.code).toBe("APPEND_ONLY");
+    expect(t.read({ path: "/s/log.md" }).version).toBe(1);
+  });
+});
+
+describe("binary documents", () => {
+  const base64 = PNG.toString("base64");
+
+  it("stores a base64 image and reads it back, current and past versions", () => {
+    const t = testCore();
+    expect(t.write({ path: "/s/shot.png", file_text: base64, encoding: "base64", description: "Login page" }))
+      .toEqual({ path: "/s/shot.png", version: 1, created: true });
+    const other = Buffer.concat([PNG, Buffer.from("x")]);
+    expect(t.write({ path: "/s/shot.png", file_text: other.toString("base64"), encoding: "base64", mode: "overwrite" }).version).toBe(2);
+    expect(t.write({ path: "/s/shot.png", file_text: other.toString("base64"), encoding: "base64", mode: "overwrite" }).unchanged).toBe(true);
+    expect(t.read({ path: "/s/shot.png" })).toMatchObject({
+      content_type: "image/png", size: other.length, total_lines: 0, lines: [], description: "Login page",
+    });
+    expect(t.core.readFile(t.ctx, { path: "/s/shot.png" }).data.equals(other)).toBe(true);
+    expect(t.core.readFile(t.ctx, { path: "/s/shot.png", version: 1 })).toMatchObject({ version: 1, current_version: 2, content_type: "image/png" });
+    expect(t.core.readFile(t.ctx, { path: "/s/shot.png", version: 1 }).data.equals(PNG)).toBe(true);
+    expect(t.list({ path: "/s" }).entries[0]).toMatchObject({ content_type: "image/png", size: other.length });
+  });
+
+  it("checks the extension, the content and the size", () => {
+    const t = testCore(10_000, 100);
+    expect(errorOf(() => t.write({ path: "/a.png", file_text: "text" })).message)
+      .toBe("/a.png is a binary document path (image/png): write its bytes in base64 with encoding 'base64'");
+    expect(errorOf(() => t.write({ path: "/a.md", file_text: base64, encoding: "base64" })).message)
+      .toContain("is not a binary document path");
+    expect(errorOf(() => t.write({ path: "/a.png", file_text: "not base64!", encoding: "base64" })).message).toBe("file_text of /a.png is not valid base64");
+    expect(errorOf(() => t.write({ path: "/a.jpg", file_text: base64, encoding: "base64" })).message).toBe("The content of /a.jpg is not a valid image/jpeg file");
+    expect(errorOf(() => t.write({ path: "/a.png", file_text: base64, encoding: "base64", append_only: true })).code).toBe("INVALID_ARGUMENT");
+    expect(errorOf(() => t.core.writeFile(t.ctx, { path: "/a.png", mode: "create", data: PNG, content_type: "image/gif" })).message)
+      .toBe("Content type image/gif does not match the extension of /a.png (image/png)");
+    expect(errorOf(() => t.core.writeFile(t.ctx, { path: "/a.png", mode: "create", data: Buffer.concat([PNG, Buffer.alloc(100)]) })).code)
+      .toBe("TOO_LARGE");
+  });
+
+  it("allows only metadata edits, no sections and no change of kind", () => {
+    const t = testCore();
+    t.core.writeFile(t.ctx, { path: "/a.png", mode: "create", data: PNG });
+    expect(errorOf(() => t.edit({ path: "/a.png", operations: [{ op: "append", text: "x" }] })).message)
+      .toBe("/a.png is a binary document (image/png): only set_metadata applies; replace its content with memory_write");
+    expect(t.edit({ path: "/a.png", operations: [{ op: "set_metadata", tags: ["shot"] }] }).version).toBe(2);
+    expect(errorOf(() => t.read({ path: "/a.png", section: "# A" })).code).toBe("INVALID_ARGUMENT");
+    expect(errorOf(() => t.move({ old_path: "/a.png", new_path: "/a.md" })).code).toBe("INVALID_ARGUMENT");
+    expect(errorOf(() => t.core.readFile(t.ctx, { path: "/b.md" })).code).toBe("NOT_FOUND");
+    t.write({ path: "/b.md", file_text: "PNG\n" });
+    expect(errorOf(() => t.core.readFile(t.ctx, { path: "/b.md" })).code).toBe("INVALID_ARGUMENT");
+    expect(t.search({ query: "PNG" }).hits.map((h) => h.path)).toEqual(["/b.md"]);
+  });
+
+  it("keeps the bytes across folder moves, deletion and restore", () => {
+    const t = testCore();
+    t.core.writeFile(t.ctx, { path: "/bugs/001/shot.png", mode: "create", data: PNG });
+    t.move({ old_path: "/bugs", new_path: "/old" });
+    expect(t.core.readFile(t.ctx, { path: "/old/001/shot.png" }).data.equals(PNG)).toBe(true);
+    t.remove({ path: "/old/001/shot.png" });
+    const [deleted] = t.core.listDeleted(t.ctx);
+    t.core.restore(t.ctx, restoreArgs.parse({ doc_id: deleted!.doc_id }));
+    const restored = t.core.readFile(t.ctx, { path: "/old/001/shot.png" });
+    expect(restored).toMatchObject({ version: 4, content_type: "image/png" });
+    expect(restored.data.equals(PNG)).toBe(true);
+    expect(t.core.fileById(t.ctx, { doc_id: deleted!.doc_id, version: 1 })).toMatchObject({ path: "/bugs/001/shot.png", version: 1 });
+    expect(t.core.versionById(t.ctx, { doc_id: deleted!.doc_id, version: 1 })).not.toHaveProperty("data");
   });
 });

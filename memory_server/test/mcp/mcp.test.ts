@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { openDatabase } from "../../src/core/db.js";
-import { AGENT_TOKEN, testConfig } from "../helpers.js";
+import { AGENT_TOKEN, PNG, testConfig } from "../helpers.js";
 
 let app: FastifyInstance;
 let url: URL;
@@ -120,5 +120,46 @@ describe("MCP server", () => {
     await expect(connect({ Authorization: `Bearer ${AGENT_TOKEN}`, "X-Memory-Store": "other" })).rejects.toThrow();
     const response = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${AGENT_TOKEN}` } });
     expect(response.status).toBe(405);
+  });
+});
+
+describe("MCP binary and append-only documents", () => {
+  type MixedResult = { content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[]; isError?: boolean };
+
+  it("writes an image in base64 and reads it back as an image", async () => {
+    const client = await connect(agentHeaders);
+    const written = await call(client, "memory_write", { path: "/s/shot.png", file_text: PNG.toString("base64"), encoding: "base64" });
+    expect(written.content[0]!.text).toBe("OK /s/shot.png version=1 (created)");
+    const read = (await client.callTool({ name: "memory_read", arguments: { path: "/s/shot.png" } })) as MixedResult;
+    expect(read.content).toHaveLength(2);
+    expect(read.content[0]).toMatchObject({ type: "text", text: expect.stringContaining(`binary: image/png, ${PNG.length} B`) });
+    expect(read.content[1]).toEqual({ type: "image", data: PNG.toString("base64"), mimeType: "image/png" });
+    const list = await call(client, "memory_list", { path: "/s" });
+    expect(list.content[0]!.text).toMatch(/^\/s\/shot\.png · v1 · \d+ B · .* · image\/png$/m);
+    await client.close();
+  });
+
+  it("describes an image over the size limit instead of returning it", async () => {
+    const client = await connect(agentHeaders);
+    const big = Buffer.concat([PNG, Buffer.alloc(1_000)]);
+    await call(client, "memory_write", { path: "/big.png", file_text: big.toString("base64"), encoding: "base64" });
+    const read = await call(client, "memory_read", { path: "/big.png" });
+    expect(read.content).toHaveLength(1);
+    expect(read.content[0]!.text.split("\n").at(-1))
+      .toBe("(not shown: larger than the 1000 bytes limit for images; download it with GET /api/stores/squashtm/files/big.png)");
+    await client.close();
+  });
+
+  it("shows the append-only flag and refuses a rewrite", async () => {
+    const client = await connect(agentHeaders);
+    await call(client, "memory_write", { path: "/log.md", file_text: "# Log\n", append_only: true });
+    const read = await call(client, "memory_read", { path: "/log.md" });
+    expect(read.content[0]!.text).toContain("append-only: yes (only additions at the end are accepted)");
+    const list = await call(client, "memory_list", {});
+    expect(list.content[0]!.text).toMatch(/^\/log\.md · v1 · 6 B · .* · append-only$/m);
+    const refused = await call(client, "memory_edit", { path: "/log.md", operations: [{ op: "prepend", text: "x" }] });
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0]!.text).toBe("Error: /log.md is append-only: only additions at its end are accepted; add text with memory_edit op 'append' without section");
+    await client.close();
   });
 });

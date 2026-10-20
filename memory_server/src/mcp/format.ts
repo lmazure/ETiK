@@ -30,6 +30,7 @@ export function formatList(result: ListResult): string {
     } else {
       out.push([
         entry.path, `v${entry.version}`, size(entry.size), entry.updated_at,
+        entry.content_type ?? "", entry.append_only ? "append-only" : "",
         entry.tags.length ? `[${entry.tags.join(", ")}]` : "", entry.description,
       ].filter((s) => s !== "").join(" · "));
     }
@@ -38,7 +39,8 @@ export function formatList(result: ListResult): string {
   return out.join("\n");
 }
 
-export function formatRead(result: ReadResult, maxChars: number): string {
+/** `note`, for a binary document: why its content is not shown; without it, an image follows the text. */
+export function formatRead(result: ReadResult, maxChars: number, note?: string): string {
   const header = [`path: ${result.path}`];
   header.push(`version: ${result.version}` + (result.is_past_version ? ` (past version; current is ${result.current_version})` : ""));
   if (result.description) header.push(`description: ${result.description}`);
@@ -46,6 +48,12 @@ export function formatRead(result: ReadResult, maxChars: number): string {
   const metadata = Object.entries(result.metadata);
   if (metadata.length) header.push(`metadata: ${metadata.map(([k, v]) => `${k}=${v}`).join("; ")}`);
   header.push(`updated: ${result.updated_at}`);
+  if (result.append_only) header.push("append-only: yes (only additions at the end are accepted)");
+  if (result.content_type !== undefined) {
+    header.push(`binary: ${result.content_type}, ${size(result.size)}`);
+    if (note) header.push(note);
+    return header.join("\n");
+  }
   if (result.section) header.push(`section: ${result.section}`);
   header.push(result.total_lines === 0 ? "(empty document)" : `lines ${result.from}-${result.to} of ${result.total_lines}`);
 
