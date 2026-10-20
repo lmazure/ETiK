@@ -13,6 +13,7 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
 │ :8090                 :9501  ◄───────────── web app (read)  │
 │   ▲                     ▲                                   │
 │   │ UI (Playwright CLI) │ MCP (memory_* tools), REST upload │
+│   │ and REST API        │                                   │
 │ ┌─┴─────────────────────┴───────────────┐                   │
 │ │ Test container (test_environment/)    │ ◄──── console ─── │
 │ │ Claude Code in YOLO mode, firewalled  │ ──────────────────┼──► Anthropic API,
@@ -26,10 +27,10 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
 - **The test container** (`test_environment/`) runs Claude Code with `--dangerously-skip-permissions`, so no command needs approval.
   - You chat with Claude Code from your browser, in the web terminal of the ETiK console (`http://localhost:7681`).
   - A configuration (`test-configurations/squashtm/`) defines the system prompt, the allowed Internet domains and host ports, the tools and the skills; you upload it from the console.
-  - Claude Code drives SquashTM's UI with Playwright CLI, following the Exploratory Testing process in its system prompt (`test-configurations/squashtm/system-prompt.md`).
+  - Claude Code tests SquashTM's UI, with Playwright CLI, and its public REST API, following the Exploratory Testing process in its system prompt (`test-configurations/squashtm/system-prompt.md`).
   - For each Exploratory Test Session, the agent creates a folder `/sessions/NNN/` in the memory server, where it writes the charter, checklist, replay log (append-only), bug reports and screenshots. The workspace only holds temporary files.
   - A firewall only lets the container reach the Anthropic API, and, while Claude Code runs, the domains and host ports of its configuration: the SquashTM documentation, and, on the host, SquashTM and the memory server.
-- **The memory server** (`memory_server/`) holds the agent's durable knowledge about the SUT across Sessions (`/knowledge/`: UI pages, private API endpoints, business rules) and the Sessions themselves (`/sessions/`).
+- **The memory server** (`memory_server/`) holds the agent's durable knowledge about the SUT across Sessions (`/knowledge/`: UI pages, private API endpoints, public REST API endpoints, business rules) and the Sessions themselves (`/sessions/`).
   - It is a separate container, so the agent cannot tamper with its files.
   - It keeps every version of every document and the change note of each change; the agent starts each change note with its Session.
   - The agent reaches it through MCP (`memory_*` tools), and uploads screenshots through its REST API (`memory-upload` skill), with a token limited to its own store.

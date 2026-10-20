@@ -4,7 +4,7 @@ Each folder is a configuration of the test container: upload it from the ETiK co
 
 ## squashtm
 
-Exploratory testing of SquashTM: Claude Code drives SquashTM's UI with Playwright CLI and keeps everything in the memory store `squashtm`:
+Exploratory testing of SquashTM: Claude Code tests SquashTM's UI, with Playwright CLI, and its public REST API, and keeps everything in the memory store `squashtm`:
 
 ```
 /knowledge/business-rules.md          cross-cutting rules
@@ -18,6 +18,8 @@ Exploratory testing of SquashTM: Claude Code drives SquashTM's UI with Playwrigh
 ```
 
 Markdown documents are written with the `memory_*` tools. Screenshots are taken into the workspace's `tmp/` folder, then uploaded with the `memory-upload` skill (`squashtm/skills/memory-upload/`), which sends the file to the memory server's REST API with `MEMORY_URL` and `MEMORY_AGENT_TOKEN`: the image never goes through the conversation. The workspace only holds temporary files.
+
+REST API calls authenticate with a bearer token of `admin`, given by the `squashtm-api-token` skill (`squashtm/skills/squashtm-api-token/`), which creates it through SquashTM's private API and caches it. The `get-logs` skill uses it too.
 
 Prerequisites, on the host:
 - SquashTM listening on port 8090, e.g. started with Docker Compose as described in the [SquashTM Docker quick start](https://tm-en.doc.squashtest.com/latest/install-guide/installation/install-squash/docker-install.html#quick-start), with its port published on 8090.

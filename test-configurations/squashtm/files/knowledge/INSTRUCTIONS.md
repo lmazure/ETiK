@@ -8,7 +8,7 @@ Never keep SUT knowledge in local files, and never fall back to local files: if 
 
 ## What this is — and is not
 
-- **Is:** distilled, deduplicated, reusable truth about the SUT — how features are reached in the UI, stable business rules, documentation pages, private backend API calls the web app emits.
+- **Is:** distilled, deduplicated, reusable truth about the SUT — how features are reached in the UI, stable business rules, documentation pages, private backend API calls the web app emits, public REST API endpoints and how they behave.
 - **Is not:** a Session log. A Session's log (`/sessions/NNN/log/log.md`) is a replay trace of one run. Knowledge documents are the curated facts extracted from many runs.
 - **Never** store under `/knowledge/`: Session-specific Charter/checklist content or bug reports (they are transient and may be fixed; they live under `/sessions/`).
 
@@ -31,14 +31,14 @@ Then read **only** the documents relevant to the current charter/test with `memo
   ## Business rules
   ```
 
-- Every document is created with a `description`: one line stating its scope (e.g. `Requirement entity: docs, UI pages, private API, rules`). Keep it accurate when the content changes (`memory_edit` with `set_metadata`).
+- Every document is created with a `description`: one line stating its scope (e.g. `Requirement entity: docs, UI pages, private API, REST API, rules`). Keep it accurate when the content changes (`memory_edit` with `set_metadata`).
 
 ## Source tags
 
 Every fact carries a tag so the memory can be trusted and curated:
 
 - `documented` — from a source the user provided (User Documentation, User Story, Bug Report…). Note the source name.
-- `observed` — seen first-hand during testing (UI behavior, network traffic).
+- `observed` — seen first-hand during testing (UI behavior, network traffic, REST API responses).
 - `assumed` — an unverified inference. Must be re-checked before being relied upon.
 
 Always record the **Session** and **date**, plus — for `documented` — the source name.
@@ -47,7 +47,7 @@ The Session lets you trace a fact back to its log `/sessions/NNN/log/log.md` for
 
 ## Entity document schema
 
-Use these exact headings so you always know where to read and where to write. Each section is a **growing list of entries** — there can be several docs, several UI pages, and several API endpoints, and new ones may be discovered in different Sessions. **Append** a new entry rather than overwriting; never collapse distinct items into one. Omit a section only while it has no entries yet.
+Use these exact headings so you always know where to read and where to write. Each section is a **growing list of entries** — there can be several docs, several UI pages, and several private or public API endpoints, and new ones may be discovered in different Sessions. **Append** a new entry rather than overwriting; never collapse distinct items into one. Omit a section only while it has no entries yet.
 
 ```markdown
 # Entity: <Name>
@@ -81,6 +81,17 @@ Use these exact headings so you always know where to read and where to write. Ea
 - GET /backend/.../{id} — Read
   - Response: <status> {...}
   - Source: observed, session_NNN, <date>
+
+## Public REST API
+<!-- one entry per endpoint, under /api/rest/latest/ -->
+- POST /api/rest/latest/... — Create
+  - Payload: {...}
+  - Response: <status> {...}
+  - Differences from the UI: <rules or validation that differ, or none seen>
+  - Source: documented|observed, session_NNN, <date>[, <source name>]
+- GET /api/rest/latest/.../{id} — Read
+  - Response: <status> {...}
+  - Source: documented|observed, session_NNN, <date>[, <source name>]
 
 ## Business rules
 - <rule>  (source: observed|documented, session_NNN, <date>)
