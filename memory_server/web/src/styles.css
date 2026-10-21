@@ -105,7 +105,10 @@ button.link:hover { text-decoration: underline; }
 .tabs button { flex: 1; padding: 8px; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; }
 .tabs button[aria-selected="true"] { border-bottom-color: var(--accent); font-weight: 600; }
 .documents, .activity { padding: 8px; }
-.filter { width: 100%; margin-bottom: 8px; }
+.tree-tools { display: flex; gap: 6px; margin-bottom: 8px; }
+.filter { flex: 1; min-width: 0; }
+.tree-toggle { border: 1px solid var(--border); border-radius: 4px; background: var(--bg); padding: 2px 8px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.tree-toggle:disabled { opacity: 0.5; cursor: default; }
 .tree, .tree ul, .deleted-group ul { list-style: none; margin: 0; padding-left: 12px; }
 .tree { padding-left: 0; }
 .folder-name { display: flex; align-items: center; gap: 2px; border: none; background: none; padding: 2px 0; cursor: pointer; font-weight: 500; }

@@ -84,6 +84,32 @@ test("new, moved and deleted documents are marked in the tree", async ({ page, r
   await expect(page.locator(".history")).toContainText("deleted");
 });
 
+test("the whole tree can be collapsed and expanded", async ({ page, request }) => {
+  await create(request, "/fold/sub/deep.md", "deep\n");
+  await create(request, "/fold/top.md", "top\n");
+  await logIn(page);
+  const doc = (name: string) => page.locator(".tree .doc", { hasText: name });
+  await expect(doc("deep.md")).toBeVisible();
+
+  await page.getByRole("button", { name: "Collapse all" }).click();
+  await expect(doc("deep.md")).toHaveCount(0);
+  await expect(doc("top.md")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Expand all" })).toBeVisible();
+
+  await page.getByRole("button", { name: "fold/", exact: true }).click();
+  await expect(doc("top.md")).toBeVisible();
+  await expect(doc("deep.md")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Collapse all" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Collapse all" }).click();
+  await page.getByRole("button", { name: "Expand all" }).click();
+  await expect(doc("deep.md")).toBeVisible();
+  await expect(doc("top.md")).toBeVisible();
+
+  await page.getByRole("searchbox", { name: "Filter documents" }).fill("deep");
+  await expect(page.getByRole("button", { name: "Collapse all" })).toBeDisabled();
+});
+
 test("HTML written in a memory is shown as text, never rendered", async ({ page, request }) => {
   let dialogs = 0;
   page.on("dialog", (dialog) => {

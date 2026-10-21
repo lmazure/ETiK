@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Change, DocumentEntry } from "../../src/core/memory-core.js";
 import { foldContext, lineDiff, metadataDiff } from "../../web/src/diffs.js";
 import { formatRoute, parseRoute, type Route } from "../../web/src/routes.js";
-import { applyChange, buildTree, fromList } from "../../web/src/tree.js";
+import { applyChange, buildTree, folderPaths, fromList } from "../../web/src/tree.js";
 
 function entry(id: number, path: string): DocumentEntry {
   return { type: "document", id, path, version: 1, size: 1, updated_at: "", tags: [], description: `desc ${id}`, append_only: false };
@@ -48,6 +48,11 @@ describe("tree", () => {
     let docs = applyChange(initial, change([{ doc_id: 5, path: "/n.md", version: 1, op: "create" }]));
     docs = applyChange(docs, change([{ doc_id: 5, path: "/n.md", version: 2, op: "edit" }]));
     expect(docs.get("/n.md")).toMatchObject({ badge: "new", version: 2 });
+  });
+
+  it("lists every folder below the root, depth first", () => {
+    const docs = fromList([entry(1, "/a/b/x.md"), entry(2, "/a/y.md"), entry(3, "/c/z.md"), entry(4, "/top.md")]);
+    expect(folderPaths(buildTree(docs))).toEqual(["/a", "/a/b", "/c"]);
   });
 });
 
