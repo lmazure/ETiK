@@ -7,7 +7,7 @@ const GITLAB_URL = "https://gitlab.com";
 const PROJECT    = "henixdevelopment/squash/squash-tm/core/squashtest-tm-staging";
 const PRIORITIES = ["Highest", "High", "Medium", "Low", "Lowest"];
 
-const USAGE = "Usage: report-bug.mjs <memory path of bug.md> --memory-url <url> --store <store> --priority <Highest|High|Medium|Low|Lowest> [--security] [--draft] [--display]";
+const USAGE = "Usage: report-bug.mjs <memory path of issue.md> --memory-url <url> --store <store> --priority <Highest|High|Medium|Low|Lowest> [--security] [--draft] [--display]";
 
 const MEDIA_TYPES = { ".png": "image/png", ".webm": "video/webm" };
 
@@ -40,7 +40,7 @@ function parseCli() {
 
   if (positionals.length !== 1) fail(`expected exactly one memory path\n${USAGE}`);
   const file = positionals[0];
-  if (!file.startsWith("/")) fail(`not an absolute memory path (e.g. /sessions/042/bugs/007/bug.md): ${file}`);
+  if (!file.startsWith("/")) fail(`not an absolute memory path (e.g. /sessions/042/issues/007/issue.md): ${file}`);
   if (!file.toLowerCase().endsWith(".md")) fail(`not a Markdown document (.md expected): ${file}`);
 
   if (!values["memory-url"]) fail(`--memory-url is required\n${USAGE}`);
@@ -97,7 +97,7 @@ function splitTitle(markdown, file) {
   return { title: match[1].trim(), body: before + after };
 }
 
-/** Memory path of a referenced image or video, relative to the bug's folder or absolute; null for anything else. */
+/** Memory path of a referenced image or video, relative to the issue report's folder or absolute; null for anything else. */
 function memoryMediaPath(target, baseDir) {
   const raw = target.startsWith("<") && target.endsWith(">") ? target.slice(1, -1) : target;
   if (/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith("//")) return null;

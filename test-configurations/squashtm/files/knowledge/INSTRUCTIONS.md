@@ -10,7 +10,7 @@ Never keep SUT knowledge in local files, and never fall back to local files: if 
 
 - **Is:** distilled, deduplicated, reusable truth about the SUT — how features are reached in the UI, stable business rules, documentation pages, private backend API calls the web app emits, public REST API endpoints and how they behave.
 - **Is not:** a Session log. A Session's log (`/sessions/NNN/log/log.md`) is a replay trace of one run. Knowledge documents are the curated facts extracted from many runs.
-- **Never** store under `/knowledge/`: Session-specific Charter/checklist content or bug reports (they are transient and may be fixed; they live under `/sessions/`).
+- **Never** store under `/knowledge/`: Session-specific Charter/checklist content or issue reports (they are transient and may be fixed; they live under `/sessions/`).
 
 ## How loading works — list first, then only what's relevant
 

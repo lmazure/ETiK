@@ -1,17 +1,17 @@
 ---
 name: report-bug
-description: Publish a bug report stored in the memory server as an issue in the SquashTM staging GitLab project, uploading its PNG screenshots and WebM videos. Use only when the user explicitly asks to create a GitLab issue for a bug (e.g. "publish/file/report /sessions/042/bugs/007/bug.md in GitLab").
+description: Publish an issue report stored in the memory server as an issue in the SquashTM staging GitLab project, uploading its PNG screenshots and WebM videos. Use only when the user explicitly asks to create a GitLab issue for a bug (e.g. "publish/file/report /sessions/042/issues/007/issue.md in GitLab").
 allowed-tools: Bash(node .claude/skills/report-bug/scripts/report-bug.mjs:*)
 ---
 
 # Report a Bug in GitLab
 
-Creates an issue in https://gitlab.com/henixdevelopment/squash/squash-tm/core/squashtest-tm-staging from a bug report written in GitLab Flavored Markdown and stored in the memory server. Requires the `GITLAB_TOKEN` and `MEMORY_TOKEN` environment variables (`MEMORY_TOKEN`: a memory server token that reads the store; the viewer token is enough).
+Creates an issue in https://gitlab.com/henixdevelopment/squash/squash-tm/core/squashtest-tm-staging from an issue report written in GitLab Flavored Markdown and stored in the memory server. Requires the `GITLAB_TOKEN` and `MEMORY_TOKEN` environment variables (`MEMORY_TOKEN`: a memory server token that reads the store; the viewer token is enough).
 
 ## Quick start
 
 ```bash
-node .claude/skills/report-bug/scripts/report-bug.mjs /sessions/042/bugs/007/bug.md \
+node .claude/skills/report-bug/scripts/report-bug.mjs /sessions/042/issues/007/issue.md \
   --memory-url http://localhost:9501 --store squashtm --priority Medium
 ```
 
@@ -19,7 +19,7 @@ node .claude/skills/report-bug/scripts/report-bug.mjs /sessions/042/bugs/007/bug
 
 | Flag | Required | Effect |
 |------|----------|--------|
-| `<memory path>` | yes | Absolute path of the bug report in the store, e.g. `/sessions/042/bugs/007/bug.md`. |
+| `<memory path>` | yes | Absolute path of the issue report in the store, e.g. `/sessions/042/issues/007/issue.md`. |
 | `--memory-url <url>` | yes | Base URL of the memory server, e.g. `http://localhost:9501`. No default. |
 | `--store <store>` | yes | Memory store holding the bug, e.g. `squashtm`. No default. |
 | `--priority <Highest\|High\|Medium\|Low\|Lowest>` | yes | Sets the `Priority::<P>` label. |
@@ -33,8 +33,8 @@ The labels `Type::Bug` and `ProdImpact::ToBeAnalyzed` are always set.
 
 - Must have the `.md` extension.
 - The first `# ` heading becomes the issue title and the rest becomes the description.
-- `.png` and `.webm` documents referenced as `![alt](file.png)`, `[text](file.webm)`, `<img src="file.png">` or `<video src="file.webm">` are downloaded from the memory server and uploaded to GitLab. A relative reference is resolved against the bug report's folder (`shot.png` in `/sessions/042/bugs/007/bug.md` is `/sessions/042/bugs/007/shot.png`); an absolute one (`/sessions/042/log/shot.png`) is taken as is. GitLab renders `![alt](file.webm)` as an inline video player.
-- Everything is read from the memory server first: a missing bug report or referenced file aborts the run before anything is created in GitLab.
+- `.png` and `.webm` documents referenced as `![alt](file.png)`, `[text](file.webm)`, `<img src="file.png">` or `<video src="file.webm">` are downloaded from the memory server and uploaded to GitLab. A relative reference is resolved against the issue report's folder (`shot.png` in `/sessions/042/issues/007/issue.md` is `/sessions/042/issues/007/shot.png`); an absolute one (`/sessions/042/log/shot.png`) is taken as is. GitLab renders `![alt](file.webm)` as an inline video player.
+- Everything is read from the memory server first: a missing issue report or referenced file aborts the run before anything is created in GitLab.
 
 ## Output
 
