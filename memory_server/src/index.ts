@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { openDatabase } from "./core/db.js";
+import { TransformersEmbedder } from "./embedding/transformers.js";
 
 const config = loadConfig();
 // The web app is built next to the server code (dist/web); a dev run from src/ simply has none.
@@ -14,7 +15,10 @@ if (!config.adminToken && !config.viewerToken && config.agentTokens.length === 0
 }
 if (config.dbPath !== ":memory:") mkdirSync(dirname(config.dbPath), { recursive: true });
 const db = openDatabase(config.dbPath);
-const app = buildApp(config, db, { logger: { level: process.env.LOG_LEVEL ?? "info" } });
+const embedder = config.embeddingModel === undefined ? undefined
+  : new TransformersEmbedder({ model: config.embeddingModel, cacheDir: config.modelDir, allowDownload: config.modelDownload });
+const app = buildApp(config, db, { logger: { level: process.env.LOG_LEVEL ?? "info" } }, { embedder });
+if (!embedder) app.log.info("Semantic search disabled (MEMORY_EMBEDDING_MODEL=none)");
 
 const shutdown = async (signal: string) => {
   app.log.info(`${signal} received, shutting down`);

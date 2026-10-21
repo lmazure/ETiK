@@ -16,7 +16,7 @@ Never keep Site knowledge in local files, and never fall back to local files: if
 
 There is no index document: every document carries a one-line `description` stating its scope, and `memory_list(path="/knowledge/", depth=5)` returns path, description and tags of every knowledge document. Call it at the start of each Session; it is the index.
 
-Then read **only** the documents relevant to the current review scope with `memory_read`; for a large document, read only the section you need (`section="## Calls to action"`). When you do not know which document holds something, use `memory_search` with `path_prefix="/knowledge/"` (e.g. a page URL, a headline, a tracking ID, a competitor name). Never read every document.
+Then read **only** the documents relevant to the current review scope with `memory_read`; for a large document, read only the section you need (`section="## Calls to action"`). When you do not know which document holds something, use `memory_search` with `path_prefix="/knowledge/"`: the default `keyword` mode for exact text (e.g. a page URL, a headline, a tracking ID, a competitor name), `mode="hybrid"` for a question or a description (e.g. "which pages offer a free trial?"); a hybrid hit gives the section to read with `memory_read(section=…)`. Never read every document.
 
 ## Documents
 
@@ -122,7 +122,7 @@ Cross-cutting rules go in `/knowledge/brand-and-voice.md`, `/knowledge/site-stru
 Give every change a short `change_note` that starts with the current Session and says why the change is made (e.g. `session_042: Pricing page CTAs and form observed`), like a commit message.
 
 1. **Capture — continuously, append-only.** The moment a durable fact is confirmed (from a provided source early in the Session, or during the review), record it with a source tag, Session, and date. Capture is cheap and resists Session crashes.
-   - First check that it is not already recorded: `memory_search` with `path_prefix="/knowledge/"` for the page URL, the headline, the tracking ID, or the rule's key words.
+   - First check that it is not already recorded: `memory_search` with `path_prefix="/knowledge/"` for the page URL, the headline or the tracking ID (keyword), and, for a rule or a claim, with `mode="hybrid"` and the fact stated in a sentence: it also finds it written in other words.
    - Add an entry to an existing document with `memory_edit`, operation `{"op": "append", "section": "## Calls to action and conversion paths", "create_section": true, "text": "- CTA: …"}` (no need to read the document first).
    - Create a new page document with `memory_write` (mode `create`, a `description`, tags `["page"]`), with the schema headings that already have entries.
 2. **Consolidate — periodically (end of Session).**

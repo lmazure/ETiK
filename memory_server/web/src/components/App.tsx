@@ -51,7 +51,7 @@ function Content() {
     case "diff":
       return <DiffView store={current.store} id={current.id} from={current.from} to={current.to} />;
     case "search":
-      return <SearchResults store={current.store} query={current.query} />;
+      return <SearchResults store={current.store} query={current.query} mode={current.mode ?? "keyword"} />;
     default:
       return <StoreHome />;
   }

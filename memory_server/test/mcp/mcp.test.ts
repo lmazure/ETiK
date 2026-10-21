@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { openDatabase } from "../../src/core/db.js";
-import { AGENT_TOKEN, PNG, testConfig } from "../helpers.js";
+import { AGENT_TOKEN, FakeEmbedder, PNG, testConfig } from "../helpers.js";
 
 let app: FastifyInstance;
 let url: URL;
@@ -161,5 +161,29 @@ describe("MCP binary and append-only documents", () => {
     expect(refused.isError).toBe(true);
     expect(refused.content[0]!.text).toBe("Error: /log.md is append-only: only additions at its end are accepted; add text with memory_edit op 'append' without section");
     await client.close();
+  });
+});
+
+describe("MCP semantic search", () => {
+  it("shows one hit per section chunk with its line range and similarity", async () => {
+    const semanticApp = buildApp(testConfig(), openDatabase(":memory:"), {}, { embedder: new FakeEmbedder() });
+    try {
+      const semanticUrl = new URL("/mcp", await semanticApp.listen({ host: "127.0.0.1", port: 0 }));
+      const client = new Client({ name: "test", version: "1.0.0" });
+      await client.connect(new StreamableHTTPClientTransport(semanticUrl, { requestInit: { headers: agentHeaders } }));
+      await call(client, "memory_write", {
+        path: "/entities/campaign.md", file_text: "# Campaign\n\nCampaigns.\n\n## Business rules\n- A campaign groups iterations\n- Iterations hold test suites\n",
+      });
+      const search = await call(client, "memory_search", { query: "campaign groups iterations", mode: "semantic", limit: 1 });
+      expect(search.content[0]!.text).toMatch(new RegExp([
+        "^2 sections, most similar first",
+        "/entities/campaign\\.md:5-7 · ## Business rules · 0\\.\\d+",
+        "    - A campaign groups iterations",
+        "next_offset=1 \\(more results: call again with offset=1\\)$",
+      ].join("\n")));
+      await client.close();
+    } finally {
+      await semanticApp.close();
+    }
   });
 });

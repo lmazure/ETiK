@@ -150,7 +150,10 @@ export function openApiDocument(): Record<string, unknown> {
       },
       "/api/stores/{store}/search": {
         post: { summary: tools.memory_search.description, parameters: [store], requestBody: jsonBody(searchArgs),
-          responses: { "200": ok("Hits"), "501": { $ref: "#/components/responses/Error" }, ...errors } },
+          responses: {
+            "200": ok("{mode, hits: [{path, line, end_line (semantic, hybrid), section, snippet, score}], total, next_offset}"),
+            "501": { $ref: "#/components/responses/Error" }, ...errors,
+          } },
       },
       "/api/stores/{store}/move": {
         post: { summary: tools.memory_move.description, parameters: [store], requestBody: jsonBody(moveArgs),

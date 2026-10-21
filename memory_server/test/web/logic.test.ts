@@ -58,10 +58,18 @@ describe("routes", () => {
     { name: "doc", store: "squashtm", id: 12, version: 3, line: 40 },
     { name: "diff", store: "squashtm", id: 12, from: 3, to: 5 },
     { name: "search", store: "squashtm", query: "/backend/x & y" },
+    { name: "search", store: "squashtm", query: "deleting a requirement", mode: "semantic" },
+    { name: "search", store: "squashtm", query: "x", mode: "hybrid" },
   ];
 
   it.each(routes)("round-trips %o", (route) => {
     expect(parseRoute(formatRoute(route))).toEqual(route);
+  });
+
+  it("reads a missing, keyword or unknown search mode as keyword", () => {
+    expect(formatRoute({ name: "search", store: "s", query: "x", mode: "keyword" })).toBe("#/s/s/search?q=x");
+    expect(parseRoute("#/s/s/search?q=x&mode=keyword")).toEqual({ name: "search", store: "s", query: "x" });
+    expect(parseRoute("#/s/s/search?q=x&mode=fuzzy")).toEqual({ name: "search", store: "s", query: "x" });
   });
 
   it("falls back on unknown or invalid hashes", () => {

@@ -19,7 +19,8 @@ Where the definitions live:
 - tool inputs, descriptions and REST body validation: [`src/schemas.ts`](src/schemas.ts);
 - MCP registration and text results: [`src/mcp/server.ts`](src/mcp/server.ts), [`src/mcp/format.ts`](src/mcp/format.ts);
 - REST routes, status codes and headers: [`src/api/rest.ts`](src/api/rest.ts), OpenAPI in [`src/api/openapi.ts`](src/api/openapi.ts);
-- tokens and store selection: [`src/auth.ts`](src/auth.ts); limits: [`src/config.ts`](src/config.ts).
+- tokens and store selection: [`src/auth.ts`](src/auth.ts); limits: [`src/config.ts`](src/config.ts);
+- semantic search: chunks in [`src/core/chunks.ts`](src/core/chunks.ts), ranking and indexing in [`src/core/semantic.ts`](src/core/semantic.ts), the model in [`src/embedding/transformers.ts`](src/embedding/transformers.ts).
 
 When this document and the code disagree, the code is right and this document must be fixed.
 
@@ -203,20 +204,23 @@ A bigger image, or a video, is not returned; a last line says why and where to g
 
 ### `memory_search`
 
-> Search the content of memory documents. Returns matches with path, line number, enclosing section heading, a short snippet and a score. Use it to check whether something is already recorded before adding it, or to find all passages matching a pattern.
+> Search the content of memory documents. Returns matches with path, line number (a line range for semantic and hybrid), enclosing section heading, a short snippet and a score. Use keyword or regex to find exact text (a URL, an endpoint, a marker) or all passages matching a pattern; use hybrid or semantic to check whether a fact or rule is already recorded, possibly in other words.
 
 | Parameter | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `query` | string | required | Text or pattern; must not be empty. |
-| `mode` | `keyword` \| `regex` \| `semantic` \| `hybrid` | `keyword` | `semantic` and `hybrid` give `UNSUPPORTED`. |
+| `query` | string | required | Text, pattern or question; must not be empty. |
+| `mode` | `keyword` \| `regex` \| `semantic` \| `hybrid` | `keyword` | See below. |
 | `path_prefix` | string | `"/"` | Folder or single document to search. |
 | `tags` | string[] | — | Only documents carrying all these tags. |
 | `metadata` | map string→string | — | Only documents whose metadata has all these key/value pairs. |
 | `limit` | integer 1–100 | 20 | Page size. |
 | `offset` | integer ≥ 0 | 0 | Page start. |
 
-- Binary documents never match.
-- Matching is line by line. `keyword` is a case-insensitive literal and cannot contain a newline. `regex` is a JavaScript regular expression (flag `g`, case-sensitive unless written otherwise), at most 500 characters; an invalid one gives `INVALID_ARGUMENT`.
+Binary documents never match. The filters apply to every mode.
+
+**`keyword` and `regex`**: line by line.
+
+- `keyword` is a case-insensitive literal and cannot contain a newline. `regex` is a JavaScript regular expression (flag `g`, case-sensitive unless written otherwise), at most 500 characters; an invalid one gives `INVALID_ARGUMENT`.
 - One hit per matching line; `score` is the number of matches in the line. Hits are ordered by document path, then line.
 - `section` is the innermost heading above the line, absent before the first heading. The snippet is the line, cut to 200 characters around the first match with `…`.
 
@@ -229,6 +233,25 @@ A bigger image, or a video, is not returned; a last line says why and where to g
 ```
 
 No hit gives `No match`. A truncated page ends with `next_offset=N (more matches: call again with offset=N)`.
+
+**`semantic` and `hybrid`**: by meaning, one hit per chunk.
+
+- Text documents are cut into **chunks**: one per heading, running to the next heading of any level (headings in fenced code blocks do not count), plus the text before the first heading; a chunk over 1500 characters is split at line boundaries, after a blank line when possible. A chunk with nothing but its heading is not indexed.
+- Each chunk is embedded with a local model, chosen when the image is built (`MEMORY_EMBEDDING_MODEL`): `english` (default, `Xenova/e5-small-v2`) or `multilingual` (`Xenova/multilingual-e5-small`, which also matches across languages, e.g. an English question and a French passage). The text embedded is `Description. Heading, Subheading: body`; the path is not embedded.
+- `semantic`: `score` is the cosine similarity between the query and the chunk (3 decimals). With these models scores are compressed, typically between 0.75 and 0.92, and those of related and unrelated passages overlap: compare scores within one result, never with a fixed threshold.
+- `hybrid`: Reciprocal Rank Fusion (k = 60) of the semantic ranking and a BM25 ranking of the query's words (case and accents ignored) over the same chunks; `score` is the fused value (4 decimals). Use it when the query contains distinctive words.
+- Every chunk in scope is ranked, most relevant first (ties by path, then line); `total` is the number of chunks in scope. A hit has `line` and `end_line` (the chunk's first and last lines; `line` is the heading line when the chunk starts with its heading), `section` (the chunk's heading, to read with `memory_read(section)`), and as snippet the body line with most query words (else the first one with text), cut to 200 characters.
+- The query is at most 1000 characters (`INVALID_ARGUMENT`). Without a model (`MEMORY_EMBEDDING_MODEL=none`), both modes give `UNSUPPORTED`.
+- Indexing: vectors are cached in the database per model and chunk text, so unchanged chunks are never embedded again (moves and restores reuse them). After each write, the chunks of the store that have no vector yet are embedded in the background (about half a second later); a search embeds whatever is still missing in its scope before answering, so results always reflect the current content. At startup the model is loaded and every store is indexed in the background: the first semantic search of a large store that was never indexed can take a few seconds.
+
+```
+3 sections, most similar first
+/knowledge/requirement.md:12-18 · ## Deletion rules · 0.871
+    - assumed, session_04: a requirement linked to a test case cannot be deleted
+next_offset=1 (more results: call again with offset=1)
+```
+
+In `hybrid` mode the first line is `N sections, most relevant first (similarity and key words)`. A one-line chunk shows `path:line`. No chunk in scope gives `No match`.
 
 ### `memory_write`
 
@@ -516,10 +539,15 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: image/png' -H 'If-None-
 `memory_search`. Body: the tool's arguments.
 
 ```json
-{"hits": [{"path": "/entities/requirement.md", "line": 14, "section": "## UI pages", "snippet": "- Page URL: /req", "score": 1}], "total": 1}
+{"mode": "keyword", "hits": [{"path": "/entities/requirement.md", "line": 14, "section": "## UI pages", "snippet": "- Page URL: /req", "score": 1}], "total": 1}
 ```
 
-`section` is absent before the first heading; `next_offset` as in `list`.
+```json
+{"mode": "semantic", "hits": [{"path": "/knowledge/requirement.md", "line": 12, "end_line": 18, "section": "## Deletion rules",
+  "snippet": "- assumed, session_04: a requirement linked to a test case cannot be deleted", "score": 0.871}], "total": 3, "next_offset": 1}
+```
+
+`end_line` is only present in `semantic` and `hybrid` mode; `section` is absent before the first heading; `next_offset` as in `list`.
 
 ### `POST /api/stores/{store}/move`
 
@@ -638,7 +666,7 @@ Errors: neither `doc_id` nor `path`: 400; no such deleted document or version: 4
 | `NOT_UNIQUE` | 422 | `str_replace`: `old_str` found several times without `replace_all` |
 | `SECTION_NOT_FOUND` | 422 | Heading not in the document |
 | `SECTION_AMBIGUOUS` | 422 | Heading present several times |
-| `UNSUPPORTED` | 501 | Search mode `semantic` or `hybrid` |
+| `UNSUPPORTED` | 501 | Search mode `semantic` or `hybrid` while semantic search is disabled (`MEMORY_EMBEDDING_MODEL=none`) |
 | `INTERNAL` | 500 | Unexpected failure (logged by the server) |
 
 Over MCP, the same failures come back as `Error: <message>` with `isError: true`; the code itself is only in REST responses.

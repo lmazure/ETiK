@@ -2,6 +2,7 @@ import type {
   ChangesResult, DocInfo, DocumentEntry, DocumentHistoryResult, ListResult, SearchResult, VersionResult,
 } from "../../src/core/memory-core.js";
 import type { DeletedDoc } from "../../src/core/repository.js";
+import type { SearchMode } from "./routes.js";
 
 export type { Change, ChangeItem, DocInfo, DocumentEntry, DocumentHistoryResult, HistoryEntry, SearchHit, VersionResult } from "../../src/core/memory-core.js";
 export type { DeletedDoc } from "../../src/core/repository.js";
@@ -131,6 +132,6 @@ export const api = {
   /** Bytes of one version of a binary document, by id. */
   versionFile: (store: string, id: number, version: number) =>
     requestFile(`${storePath(store)}/documents/${id}/versions/${version}/file`),
-  search: (store: string, query: string, offset = 0) =>
-    request<SearchResult>("POST", `${storePath(store)}/search`, undefined, { query, mode: "keyword", limit: 100, offset }),
+  search: (store: string, query: string, mode: SearchMode = "keyword", offset = 0) =>
+    request<SearchResult>("POST", `${storePath(store)}/search`, undefined, { query, mode, limit: mode === "keyword" ? 100 : 30, offset }),
 };

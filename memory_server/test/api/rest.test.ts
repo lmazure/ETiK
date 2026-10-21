@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { openDatabase } from "../../src/core/db.js";
-import { ADMIN_TOKEN, AGENT_TOKEN, OTHER_TOKEN, PNG, VIEWER_TOKEN, testConfig } from "../helpers.js";
+import { ADMIN_TOKEN, AGENT_TOKEN, FakeEmbedder, OTHER_TOKEN, PNG, VIEWER_TOKEN, testConfig } from "../helpers.js";
 
 let app: FastifyInstance;
 
@@ -130,9 +130,10 @@ describe("other operations", () => {
     expect(list.json().entries).toEqual([{ type: "folder", path: "/entities", documents: 1 }]);
 
     const search = await app.inject({ method: "POST", url: `${base}/search`, headers: agent, payload: { query: "ASSUMED" } });
-    expect(search.json().hits).toEqual([{ path: "/entities/a.md", line: 1, snippet: "- assumed fact", score: 1 }]);
+    expect(search.json()).toEqual({ mode: "keyword", hits: [{ path: "/entities/a.md", line: 1, snippet: "- assumed fact", score: 1 }], total: 1 });
     const semantic = await app.inject({ method: "POST", url: `${base}/search`, headers: agent, payload: { query: "x", mode: "semantic" } });
     expect(semantic.statusCode).toBe(501);
+    expect(semantic.json().error.code).toBe("UNSUPPORTED");
 
     const move = await app.inject({ method: "POST", url: `${base}/move`, headers: agent, payload: { old_path: "/entities", new_path: "/archive" } });
     expect(move.json().moved).toEqual([{ from: "/entities/a.md", to: "/archive/a.md", version: 2 }]);
@@ -243,5 +244,27 @@ describe("binary documents", () => {
       method: "PUT", url: `${base}/files/a.png`, headers: { ...agent, "if-none-match": "*" }, payload: { file_text: "x" },
     });
     expect(asJson.statusCode).toBe(400);
+  });
+});
+
+describe("semantic search", () => {
+  it("returns ranked section chunks with their line range", async () => {
+    const semanticApp = buildApp(testConfig(), openDatabase(":memory:"), {}, { embedder: new FakeEmbedder() });
+    try {
+      await semanticApp.inject({
+        method: "PUT", url: `${base}/docs/entities/campaign.md`, headers: { ...agent, "if-none-match": "*" },
+        payload: { file_text: "# Campaign\n\n## Business rules\n- A campaign groups iterations\n" },
+      });
+      const response = await semanticApp.inject({
+        method: "POST", url: `${base}/search`, headers: agent, payload: { query: "what groups iterations?", mode: "hybrid" },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        mode: "hybrid", total: 1,
+        hits: [{ path: "/entities/campaign.md", line: 3, end_line: 4, section: "## Business rules", snippet: "- A campaign groups iterations", score: 0.0328 }],
+      });
+    } finally {
+      await semanticApp.close();
+    }
   });
 });

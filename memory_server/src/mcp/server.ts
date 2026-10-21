@@ -22,9 +22,9 @@ export interface McpLimits {
   maxImageBytes: number;
 }
 
-function run(logger: FastifyBaseLogger, produce: () => string | Content[]): ToolResult {
+async function run(logger: FastifyBaseLogger, produce: () => string | Content[] | Promise<string>): Promise<ToolResult> {
   try {
-    const output = produce();
+    const output = await produce();
     return { content: typeof output === "string" ? [{ type: "text", text: output }] : output };
   } catch (error) {
     if (!(error instanceof MemoryError)) logger.error(error);
@@ -70,7 +70,7 @@ export function buildMcpServer(core: MemoryCore, ctx: Context, limits: McpLimits
   server.registerTool("memory_read", { ...meta("memory_read"), inputSchema: tools.memory_read.schema },
     async (args) => run(logger, () => read(core, ctx, args, limits)));
   server.registerTool("memory_search", { ...meta("memory_search"), inputSchema: tools.memory_search.schema },
-    async (args) => run(logger, () => formatSearch(core.search(ctx, args))));
+    async (args) => run(logger, async () => formatSearch(await core.search(ctx, args))));
   server.registerTool("memory_write", { ...meta("memory_write"), inputSchema: tools.memory_write.schema },
     async (args) => run(logger, () => formatWrite(core.write(ctx, args))));
   server.registerTool("memory_edit", { ...meta("memory_edit"), inputSchema: tools.memory_edit.schema },

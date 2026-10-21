@@ -29,7 +29,8 @@ export const readArgs = z.object({
 
 export const searchArgs = z.object({
   query: z.string(),
-  mode: z.enum(["keyword", "regex", "semantic", "hybrid"]).default("keyword"),
+  mode: z.enum(["keyword", "regex", "semantic", "hybrid"]).default("keyword")
+    .describe("keyword: case-insensitive literal, line by line. regex: JavaScript regular expression, line by line. semantic: passages close in meaning, one hit per section (in other languages too when the server runs the multilingual model). hybrid: semantic combined with the query's words, one hit per section."),
   path_prefix: z.string().default("/"),
   tags: tagsSchema.optional(),
   metadata: metadataSchema.optional().describe("Only documents whose metadata has all these key/value pairs."),
@@ -192,7 +193,7 @@ export const tools = {
     readOnly: true,
   },
   memory_search: {
-    description: "Search the content of memory documents. Returns matches with path, line number, enclosing section heading, a short snippet and a score. Use it to check whether something is already recorded before adding it, or to find all passages matching a pattern.",
+    description: "Search the content of memory documents. Returns matches with path, line number (a line range for semantic and hybrid), enclosing section heading, a short snippet and a score. Use keyword or regex to find exact text (a URL, an endpoint, a marker) or all passages matching a pattern; use hybrid or semantic to check whether a fact or rule is already recorded, possibly in other words.",
     schema: searchArgs,
     readOnly: true,
   },
