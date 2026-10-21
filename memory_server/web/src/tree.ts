@@ -118,6 +118,11 @@ export function buildTree(docs: TreeDocs): FolderNode {
   return root;
 }
 
+/** Paths of every folder below the node (the node itself excluded), depth first. */
+export function folderPaths(node: FolderNode): string[] {
+  return node.folders.flatMap((f) => [f.path, ...folderPaths(f)]);
+}
+
 export function baseName(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
 }

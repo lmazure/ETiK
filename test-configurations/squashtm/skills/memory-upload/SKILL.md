@@ -1,6 +1,6 @@
 ---
 name: memory-upload
-description: Upload a local screenshot (PNG, JPEG, GIF, WebP) or video (WebM) to the memory server, as a binary document of the store squashtm. Use it for every screenshot or video of a Session log or bug report.
+description: Upload a local screenshot (PNG, JPEG, GIF, WebP) or video (WebM) to the memory server, as a binary document of the store squashtm. Use it for every screenshot or video of a Session log or issue report.
 allowed-tools: Bash(node .claude/skills/memory-upload/scripts/memory-upload.mjs:*)
 ---
 

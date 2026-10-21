@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { SEARCH_MODES, type SearchMode } from "../routes.js";
 import { currentStore, liveCount, liveStatus, logOut, navigate, route, sidebarTab, stores } from "../state.js";
+import { nextTheme, setTheme, theme, THEME_GLYPH, THEME_LABEL } from "../theme.js";
 
 export function Header() {
   const store = currentStore.value;
@@ -19,6 +20,8 @@ export function Header() {
 
   const status = liveStatus.value;
   const count = liveCount.value;
+  const themeNow = theme.value;
+  const themeNext = nextTheme(themeNow);
 
   return (
     <header class="topbar">
@@ -52,6 +55,10 @@ export function Header() {
         {status === "live" ? "live" : status === "error" ? "connection lost, retrying" : "connecting"}
         {" · "}{count === 0 ? "no change since load" : `${count} change${count === 1 ? "" : "s"} since load`}
       </button>}
+      <button type="button" class="theme-toggle" onClick={() => setTheme(themeNext)}
+        title={`Theme: ${THEME_LABEL[themeNow]} (click for ${THEME_LABEL[themeNext]})`} aria-label={`Theme: ${THEME_LABEL[themeNow]}`}>
+        {THEME_GLYPH[themeNow]}
+      </button>
       <button type="button" class="link" onClick={logOut}>Log out</button>
     </header>
   );

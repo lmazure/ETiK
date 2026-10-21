@@ -8,18 +8,18 @@ Everything you produce is stored in the memory server, in the store `squashtm`, 
 - `knowledge/INSTRUCTIONS.md` — a local file, read only — the format and update rules for the knowledge base.
 - `/knowledge/` — the knowledge base: the durable cross-Session memory about the SUT (see "Cross-Session Memory").
 - `/sessions/NNN/` — one folder per Exploratory Test Session (`NNN` is a three-digit counter, e.g. `/sessions/042/`). The name of the Session is `session_NNN` (e.g. `session_042`). The folder is filled while the Session runs:
-  - `/sessions/NNN/charter.md` — the approved Exploratory Test Charter of the Session.
-  - `/sessions/NNN/checklist.md` — the hierarchical test checklist with checkboxes (updated as tests are performed).
-  - `/sessions/NNN/log/log.md` — the replay trace: every action and check performed, plus test-strategy rationale and analysis conclusions. It is append-only: you can only add text at its end.
+  - `/sessions/NNN/charter.md` (tag `charter`) — the approved Exploratory Test Charter of the Session.
+  - `/sessions/NNN/checklist.md` (tag `checklist`) — the hierarchical test checklist with checkboxes (updated as tests are performed).
+  - `/sessions/NNN/log/log.md` (tag `log`) — the replay trace: every action and check performed, plus test-strategy rationale and analysis conclusions. It is append-only: you can only add text at its end.
   - `/sessions/NNN/log/<name>.png` — the screenshots and other attachments referenced from the log, named semantically.
-  - `/sessions/NNN/bugs/MMM/bug.md` — one bug report per confirmed issue (`MMM` is a three-digit counter within the Session, e.g. `/sessions/042/bugs/007/bug.md`).
-  - `/sessions/NNN/bugs/MMM/<name>.png` — the screenshots and other attachments referenced from that bug report.
+  - `/sessions/NNN/issues/MMM/issue.md` (tag `issue`) — one issue report per confirmed problem (`MMM` is a three-digit counter within the Session, e.g. `/sessions/042/issues/007/issue.md`).
+  - `/sessions/NNN/issues/MMM/<name>.png` — the screenshots and other attachments referenced from that issue report.
 
 How to write:
 
-- Create a Markdown document with `memory_write` (mode `create`); change it with `memory_edit`: `str_replace` to tick a checkbox or change a line, `insert` or `str_replace` to add sub-tests.
+- Create a Markdown document with `memory_write` (mode `create`), giving it its document tag in `tags` (the tag shown in the list above, e.g. `tags: ["checklist"]`); screenshots and videos have no tag. Change a document with `memory_edit`: `str_replace` to tick a checkbox or change a line, `insert` or `str_replace` to add sub-tests.
 - Add to the log only with `memory_edit`, operation `{"op": "append", "text": "…"}` (no section). The log cannot be rewritten: to correct an entry, append a correction.
-- Screenshots and videos: save them first in the local folder `tmp/` of the working directory (e.g. `playwright-cli screenshot --filename=tmp/login-page.png`), then upload them with the `memory-upload` skill to the folder of the document that references them, keeping the file name. Reference them by file name, each on its own line: `![Login page](login-page.png)`. A screenshot used both in the log and in a bug report is uploaded to both folders.
+- Screenshots and videos: save them first in the local folder `tmp/` of the working directory (e.g. `playwright-cli screenshot --filename=tmp/login-page.png`), then upload them with the `memory-upload` skill to the folder of the document that references them, keeping the file name. Reference them by file name, each on its own line: `![Login page](login-page.png)`. A screenshot used both in the log and in an issue report is uploaded to both folders.
 - Give every change a `change_note` that starts with the name of the Session (e.g. `session_042: login tests ticked`).
 - The local working directory only holds temporary files: screenshots before upload, downloaded server logs, tools you install.
 
@@ -37,7 +37,7 @@ Do not use any other memory (local files, other memory tools) for SUT knowledge 
 
 ### Stage 1 - Define the Exploratory Test Charter
 
-First, name the Session: list the Session folders with `memory_list(path="/sessions/", depth=1)`, take the number following the highest one (`001` if there is none, `043` after `042`), and claim it at once by creating its log with `memory_write`: path `/sessions/NNN/log/log.md`, `append_only: true`, description `Session NNN log`, content `# Session NNN log` followed by the date and time. If the creation fails because the document already exists, take the next number. `NNN` and `session_NNN` in these instructions stand for that number and that name. Do this at the start of every Session, including a new Session started in the same conversation after a previous one: each Session has its own folder.
+First, name the Session: list the Session folders with `memory_list(path="/sessions/", depth=1)`, take the number following the highest one (`001` if there is none, `043` after `042`), and claim it at once by creating its log with `memory_write`: path `/sessions/NNN/log/log.md`, `append_only: true`, `tags: ["log"]`, description `Session NNN log`, content `# Session NNN log` followed by the date and time. If the creation fails because the document already exists, take the next number. `NNN` and `session_NNN` in these instructions stand for that number and that name. Do this at the start of every Session, including a new Session started in the same conversation after a previous one: each Session has its own folder.
 
 If the user has not provided an ET Charter, ask them.  
 
@@ -50,14 +50,14 @@ Then, extract the durable facts about the SUT from these information sources int
 You must have the necessary information to be able to perform the test. Ask for information completion if this is not the case. Since this is about Exploratory Testing, it is acceptable that the test perimeter is more or less fuzzy. Everything else should be clearly stated.
 
 Once you have the necessary data, propose a rewritten Charter to the user. If they have feedback, adapt the Charter.  
-When the user has approved the Charter, write it in `/sessions/NNN/charter.md`.
+When the user has approved the Charter, write it in `/sessions/NNN/charter.md` (tag `charter`).
 
 ### Stage 2 - Define an initial test checklist
 
 Create a checklist of what you expect to test. Let the knowledge you loaded in Stage 1 inform your test strategy.  
 This checklist should be organized as a hierarchy of bullet points, some being tests to perform, which should have a checkbox, other being test group titles.  
 You can exercise the SUT through its UI, its public REST API, and the private API used by the web app: choose what serves the Charter. For example, check that the constraints imposed by the UI are also enforced by the backend, by calling the API directly.  
-Write this list in `/sessions/NNN/checklist.md`.  
+Write this list in `/sessions/NNN/checklist.md` (tag `checklist`).  
 Document the rationale of your test strategy in the log `/sessions/NNN/log/log.md`.
 
 ### Stage 3 - Perform Exploratory Test
@@ -73,7 +73,7 @@ If you find something incorrect (not respecting what information sources or the 
 
 Once the test is performed, check the test's checkbox in `/sessions/NNN/checklist.md`.  
 
-When all tests have been performed, report interactively to the user a small session summary reporting an overview of the reported bugs and proceed to Stage 5.
+When all tests have been performed, report interactively to the user a small session summary reporting an overview of the reported issues and proceed to Stage 5.
 
 ### Stage 4 - Updating the test strategy to analyze incorrect or dubious SUT behavior
 
@@ -90,10 +90,10 @@ Define the tests you need to perform this analysis. Complete accordingly `/sessi
 Do not nest investigations more than 2 deep; if a further nesting would be needed, log the oddity as dubious and move on.  
 Go back to stage 3, but execute first the tests you have just added.
 
-Once you have the necessary data, if you confirm that the SUT behavior is not or may not be what is expected, record it in a bug report `/sessions/NNN/bugs/MMM/bug.md` (`MMM` is a three-digit, 1-based counter: list `/sessions/NNN/bugs/` with `memory_list(path="/sessions/NNN/bugs/", depth=1)` and take the next number, e.g. `/sessions/002/bugs/003/bug.md` for the third problem of the second Exploratory Test Session).  
+Once you have the necessary data, if you confirm that the SUT behavior is not or may not be what is expected, record it in an issue report `/sessions/NNN/issues/MMM/issue.md` (tag `issue`; `MMM` is a three-digit, 1-based counter: list `/sessions/NNN/issues/` with `memory_list(path="/sessions/NNN/issues/", depth=1)` and take the next number, e.g. `/sessions/002/issues/003/issue.md` for the third problem of the second Exploratory Test Session).  
 Use GitLab Flavored Markdown.  
-The report should refer the relevant screenshots or other attachments when adequate: upload them to `/sessions/NNN/bugs/MMM/` and reference them by file name. These references should appear where the most appropriate in the flow of the report, each on it own line (so screenshot are properly laid out), do not list them in a separate section. If the server suffered a crash, report the stack trace.  
-The bug report should respect the following template:  
+The report should refer the relevant screenshots or other attachments when adequate: upload them to `/sessions/NNN/issues/MMM/` and reference them by file name. These references should appear where the most appropriate in the flow of the report, each on it own line (so screenshot are properly laid out), do not list them in a separate section. If the server suffered a crash, report the stack trace.  
+The issue report should respect the following template:  
 
 ```markdown
 # [Feature] Concise description
@@ -129,16 +129,16 @@ Provide the date and time of the test.
 Indicate the name of the model (LLM), the thinking level, and the name of the tool piloting the LLM.
 ```
 
-When an analysis clears a dubious behavior as actually expected, record the underlying rule in the knowledge document `/knowledge/business-rules.md` (or the relevant entity document), tagged `observed` with the Session and date. When you confirm a bug, it goes only to the bug report, never to the knowledge base, since bugs are transient and may be fixed.
+When an analysis clears a dubious behavior as actually expected, record the underlying rule in the knowledge document `/knowledge/business-rules.md` (or the relevant entity document), tagged `observed` with the Session and date. When you confirm a bug, it goes only to the issue report, never to the knowledge base, since bugs are transient and may be fixed.
 
 Whatever the outcome, once the analysis of a behavior is complete, remove the ` <- CURRENTLY TESTING THIS` marker from that test (the most deeply nested one you opened) and check the boxes of the analysis tests you performed for it. Any ancestor tests keep their marker, since their own analysis is still ongoing; you finish unwinding them the same way as you climb back up.
 
 Record the conclusion of the analysis at the end of the log in every case:
-- If you confirmed the misbehavior, log the conclusion and record it in a bug report as described above.
-- If the analysis cleared the behavior (it turned out to be correct or acceptable), do not write a bug report; just log the conclusion and why the behavior is in fact expected.
+- If you confirmed the misbehavior, log the conclusion and record it in an issue report as described above.
+- If the analysis cleared the behavior (it turned out to be correct or acceptable), do not write an issue report; just log the conclusion and why the behavior is in fact expected.
 
 Then resume Stage 3, continuing with the remaining tests at the level you have returned to.  
-When you have written 16 bug reports, stop the Exploratory Testing Session.
+When you have written 16 issue reports, stop the Exploratory Testing Session.
 
 ### Stage 5 - Consolidate Memory
 

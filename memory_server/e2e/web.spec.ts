@@ -84,6 +84,56 @@ test("new, moved and deleted documents are marked in the tree", async ({ page, r
   await expect(page.locator(".history")).toContainText("deleted");
 });
 
+test("the whole tree can be collapsed and expanded", async ({ page, request }) => {
+  await create(request, "/fold/sub/deep.md", "deep\n");
+  await create(request, "/fold/top.md", "top\n");
+  await logIn(page);
+  const doc = (name: string) => page.locator(".tree .doc", { hasText: name });
+  await expect(doc("deep.md")).toBeVisible();
+
+  await page.getByRole("button", { name: "Collapse all" }).click();
+  await expect(doc("deep.md")).toHaveCount(0);
+  await expect(doc("top.md")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Expand all" })).toBeVisible();
+
+  await page.getByRole("button", { name: "fold/", exact: true }).click();
+  await expect(doc("top.md")).toBeVisible();
+  await expect(doc("deep.md")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Collapse all" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Collapse all" }).click();
+  await page.getByRole("button", { name: "Expand all" }).click();
+  await expect(doc("deep.md")).toBeVisible();
+  await expect(doc("top.md")).toBeVisible();
+
+  await page.getByRole("searchbox", { name: "Filter documents" }).fill("deep");
+  await expect(page.getByRole("button", { name: "Collapse all" })).toBeDisabled();
+});
+
+test("the theme follows the OS setting unless forced to light or dark", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await logIn(page);
+  const html = page.locator("html");
+  const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(await background()).toBe("rgb(21, 24, 30)");
+  await expect(html).not.toHaveAttribute("data-theme");
+
+  await page.getByRole("button", { name: "Theme: OS setting" }).click();
+  await expect(html).toHaveAttribute("data-theme", "light");
+  expect(await background()).toBe("rgb(255, 255, 255)");
+
+  await page.getByRole("button", { name: "Theme: light" }).click();
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  await page.reload();
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  expect(await background()).toBe("rgb(21, 24, 30)");
+
+  await page.getByRole("button", { name: "Theme: dark" }).click();
+  await expect(html).not.toHaveAttribute("data-theme");
+  await page.emulateMedia({ colorScheme: "light" });
+  expect(await background()).toBe("rgb(255, 255, 255)");
+});
+
 test("HTML written in a memory is shown as text, never rendered", async ({ page, request }) => {
   let dialogs = 0;
   page.on("dialog", (dialog) => {

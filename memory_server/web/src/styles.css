@@ -1,41 +1,26 @@
+/* Each colour is light-dark(light value, dark value), resolved against color-scheme. */
 :root {
-  --bg: #ffffff;
-  --bg-soft: #f5f6f8;
-  --bg-panel: #fafbfc;
-  --fg: #1d2330;
-  --muted: #6b7385;
-  --border: #dfe3ea;
-  --accent: #2f6fdb;
-  --accent-soft: #e7effc;
-  --changed: #d9822b;
-  --changed-soft: #fdf1e3;
-  --new: #2e9b5c;
-  --new-soft: #e5f5ec;
-  --deleted: #c2423b;
-  --deleted-soft: #fbe9e8;
+  --bg: light-dark(#ffffff, #15181e);
+  --bg-soft: light-dark(#f5f6f8, #1d2129);
+  --bg-panel: light-dark(#fafbfc, #191c23);
+  --fg: light-dark(#1d2330, #e3e6ec);
+  --muted: light-dark(#6b7385, #9198a8);
+  --border: light-dark(#dfe3ea, #2d323d);
+  --accent: light-dark(#2f6fdb, #6ea0f2);
+  --accent-soft: light-dark(#e7effc, #1f2b40);
+  --changed: light-dark(#d9822b, #f0a35a);
+  --changed-soft: light-dark(#fdf1e3, #3a2c1c);
+  --new: light-dark(#2e9b5c, #5cc98b);
+  --new-soft: light-dark(#e5f5ec, #1b3326);
+  --deleted: light-dark(#c2423b, #ef7b74);
+  --deleted-soft: light-dark(#fbe9e8, #3b2120);
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  color-scheme: light;
+  /* Follows the OS setting, unless the theme toggle of the top bar forces one (<html data-theme>). */
+  color-scheme: light dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #15181e;
-    --bg-soft: #1d2129;
-    --bg-panel: #191c23;
-    --fg: #e3e6ec;
-    --muted: #9198a8;
-    --border: #2d323d;
-    --accent: #6ea0f2;
-    --accent-soft: #1f2b40;
-    --changed: #f0a35a;
-    --changed-soft: #3a2c1c;
-    --new: #5cc98b;
-    --new-soft: #1b3326;
-    --deleted: #ef7b74;
-    --deleted-soft: #3b2120;
-    color-scheme: dark;
-  }
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 
@@ -77,6 +62,8 @@ button.link:hover { text-decoration: underline; }
 .live .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .live-live .dot { background: var(--new); }
 .live-error .dot { background: var(--deleted); }
+.theme-toggle { border: none; background: none; padding: 0 4px; font-size: 16px; line-height: 1; color: var(--muted); cursor: pointer; }
+.theme-toggle:hover { color: var(--fg); }
 
 /* ---------- login */
 
@@ -105,7 +92,10 @@ button.link:hover { text-decoration: underline; }
 .tabs button { flex: 1; padding: 8px; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; }
 .tabs button[aria-selected="true"] { border-bottom-color: var(--accent); font-weight: 600; }
 .documents, .activity { padding: 8px; }
-.filter { width: 100%; margin-bottom: 8px; }
+.tree-tools { display: flex; gap: 6px; margin-bottom: 8px; }
+.filter { flex: 1; min-width: 0; }
+.tree-toggle { border: 1px solid var(--border); border-radius: 4px; background: var(--bg); padding: 2px 8px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.tree-toggle:disabled { opacity: 0.5; cursor: default; }
 .tree, .tree ul, .deleted-group ul { list-style: none; margin: 0; padding-left: 12px; }
 .tree { padding-left: 0; }
 .folder-name { display: flex; align-items: center; gap: 2px; border: none; background: none; padding: 2px 0; cursor: pointer; font-weight: 500; }

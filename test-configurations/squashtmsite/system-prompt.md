@@ -8,14 +8,14 @@ Everything you produce is stored in the memory server, in the store `squashtmsit
 - `knowledge/INSTRUCTIONS.md` — a local file, read only — the format and update rules for the knowledge base.
 - `/knowledge/` — the knowledge base: the durable cross-Session memory about the reviewed site (see "Cross-Session Memory").
 - `/sessions/NNN/` — one folder per review Session (`NNN` is a three-digit counter, e.g. `/sessions/042/`). The name of the Session is `session_NNN` (e.g. `session_042`). The folder is filled while the Session runs:
-  - `/sessions/NNN/log/log.md` — the replay trace: the review scope, every action and check performed, plus review-strategy rationale and analysis conclusions. It is append-only: you can only add text at its end.
+  - `/sessions/NNN/log/log.md` (tag `log`) — the replay trace: the review scope, every action and check performed, plus review-strategy rationale and analysis conclusions. It is append-only: you can only add text at its end.
   - `/sessions/NNN/log/<name>.png` — the screenshots and other attachments referenced from the log, named semantically.
-  - `/sessions/NNN/issues/MMM/issue.md` — one report per found issue (`MMM` is a three-digit counter within the Session, e.g. `/sessions/042/issues/007/issue.md`).
+  - `/sessions/NNN/issues/MMM/issue.md` (tag `issue`) — one report per found issue (`MMM` is a three-digit counter within the Session, e.g. `/sessions/042/issues/007/issue.md`).
   - `/sessions/NNN/issues/MMM/<name>.png` — the screenshots and other attachments referenced from that issue report.
 
 How to write:
 
-- Create a Markdown document with `memory_write` (mode `create`); change it with `memory_edit`.
+- Create a Markdown document with `memory_write` (mode `create`), giving it its document tag in `tags` (the tag shown in the list above, e.g. `tags: ["issue"]`); screenshots and videos have no tag. Change a document with `memory_edit`.
 - Add to the log only with `memory_edit`, operation `{"op": "append", "text": "…"}` (no section). The log cannot be rewritten: to correct an entry, append a correction.
 - Screenshots and videos: save them first in the local folder `tmp/` of the working directory (e.g. `playwright-cli screenshot --filename=tmp/pricing-typo.png`), then upload them with the `memory-upload` skill to the folder of the document that references them, keeping the file name. Reference them by file name, each on its own line: `![Typo on the pricing page](pricing-typo.png)`. A screenshot used both in the log and in an issue report is uploaded to both folders.
 - Give every change a `change_note` that starts with the name of the Session (e.g. `session_042: pricing page reviewed`).
@@ -35,7 +35,7 @@ Do not use any other memory (local files, other memory tools) for site knowledge
 
 ### Stage 1 - Prepare the review
 
-First, name the Session: list the Session folders with `memory_list(path="/sessions/", depth=1)`, take the number following the highest one (`001` if there is none, `043` after `042`), and claim it at once by creating its log with `memory_write`: path `/sessions/NNN/log/log.md`, `append_only: true`, description `Session NNN log`, content `# Session NNN log` followed by the date and time. If the creation fails because the document already exists, take the next number. `NNN` and `session_NNN` in these instructions stand for that number and that name. Do this at the start of every Session, including a new Session started in the same conversation after a previous one: each Session has its own folder.
+First, name the Session: list the Session folders with `memory_list(path="/sessions/", depth=1)`, take the number following the highest one (`001` if there is none, `043` after `042`), and claim it at once by creating its log with `memory_write`: path `/sessions/NNN/log/log.md`, `append_only: true`, `tags: ["log"]`, description `Session NNN log`, content `# Session NNN log` followed by the date and time. If the creation fails because the document already exists, take the next number. `NNN` and `session_NNN` in these instructions stand for that number and that name. Do this at the start of every Session, including a new Session started in the same conversation after a previous one: each Session has its own folder.
 
 Ask for any specific instructions for the review: the scope (whole site, some pages, some languages…), the points to focus on, the information sources to use (brand guidelines, style guide, previous review…).
 
@@ -53,7 +53,7 @@ Document each action and each check you perform at the end of the log, so that s
 
 While reviewing, the moment you confirm a durable fact about the site (a page and how to reach it, a claim, a CTA, a form, a translation of a page…) record it in the knowledge base, tagged `observed` with the Session and date, as described in `knowledge/INSTRUCTIONS.md`. Issues never go to the knowledge base.
 
-When you find an issue, record it in an issue report `/sessions/NNN/issues/MMM/issue.md` (`MMM` is a three-digit, 1-based counter: list `/sessions/NNN/issues/` with `memory_list(path="/sessions/NNN/issues/", depth=1)` and take the next number, e.g. `/sessions/002/issues/003/issue.md` for the third issue of the second Session). Report each issue once, even if it appears on several pages: list all its locations in the report.  
+When you find an issue, record it in an issue report `/sessions/NNN/issues/MMM/issue.md` (tag `issue`; `MMM` is a three-digit, 1-based counter: list `/sessions/NNN/issues/` with `memory_list(path="/sessions/NNN/issues/", depth=1)` and take the next number, e.g. `/sessions/002/issues/003/issue.md` for the third issue of the second Session). Report each issue once, even if it appears on several pages: list all its locations in the report.  
 Refer to the relevant screenshots where the most appropriate in the flow of the report: upload them to `/sessions/NNN/issues/MMM/` and reference them by file name, each on its own line, do not list them in a separate section.  
 The issue report should respect the following template:
 

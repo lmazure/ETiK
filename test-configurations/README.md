@@ -13,11 +13,11 @@ Exploratory testing of SquashTM: Claude Code tests SquashTM's UI, with Playwrigh
 /sessions/NNN/checklist.md
 /sessions/NNN/log/log.md              append-only replay log
 /sessions/NNN/log/<screenshot>.png
-/sessions/NNN/bugs/MMM/bug.md         one folder per bug (001, 002…)
-/sessions/NNN/bugs/MMM/<screenshot>.png
+/sessions/NNN/issues/MMM/issue.md     one folder per issue (001, 002…)
+/sessions/NNN/issues/MMM/<screenshot>.png
 ```
 
-Markdown documents are written with the `memory_*` tools. Screenshots are taken into the workspace's `tmp/` folder, then uploaded with the `memory-upload` skill (`squashtm/skills/memory-upload/`), which sends the file to the memory server's REST API with `MEMORY_URL` and `MEMORY_AGENT_TOKEN`: the image never goes through the conversation. The workspace only holds temporary files.
+Markdown documents are written with the `memory_*` tools, each with a document tag naming its kind: `entity` or `cross-cutting` for the knowledge base, `charter`, `checklist`, `log` or `issue` for a Session; screenshots and videos have none. Screenshots are taken into the workspace's `tmp/` folder, then uploaded with the `memory-upload` skill (`squashtm/skills/memory-upload/`), which sends the file to the memory server's REST API with `MEMORY_URL` and `MEMORY_AGENT_TOKEN`: the image never goes through the conversation. The workspace only holds temporary files.
 
 REST API calls authenticate with a bearer token of `admin`, given by the `squashtm-api-token` skill (`squashtm/skills/squashtm-api-token/`), which creates it through SquashTM's private API and caches it. The `get-logs` skill uses it too.
 
@@ -43,7 +43,7 @@ Review of the SquashTM marketing site (spelling, translations, links, forms, cla
 /sessions/NNN/issues/MMM/<screenshot>.png
 ```
 
-Screenshots are uploaded as for `squashtm`, with `squashtmsite/skills/memory-upload/`: a copy of squashtm's skill whose script names the store `squashtmsite`.
+Documents are tagged as for `squashtm`: `page` or `cross-cutting` for the knowledge base, `log` or `issue` for a Session. Screenshots are uploaded as for `squashtm`, with `squashtmsite/skills/memory-upload/`: a copy of squashtm's skill whose script names the store `squashtmsite`.
 
 Prerequisites, on the host:
 - The memory server listening on port 9501 (see [`../memory_server/README.md`](../memory_server/README.md)), with an agent token for the store `squashtmsite` (`MEMORY_AGENT_TOKENS=squashtmsite=…` in `../memory_server/.env`).

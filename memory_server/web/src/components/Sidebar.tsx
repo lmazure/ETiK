@@ -4,7 +4,7 @@ import { api, type Change, type ChangeItem } from "../api.js";
 import { formatTime, OP_LABEL } from "../format.js";
 import type { Route } from "../routes.js";
 import { activity, activityComplete, currentStore, deletedDocs, liveCount, route, sidebarTab, treeDocs, type ActivityEntry } from "../state.js";
-import { baseName, buildTree, type FolderNode, type TreeDoc } from "../tree.js";
+import { baseName, buildTree, folderPaths, type FolderNode, type TreeDoc } from "../tree.js";
 import { Link } from "./common.js";
 
 const collapsed = signal<ReadonlySet<string>>(new Set());
@@ -14,6 +14,11 @@ function toggle(path: string) {
   if (next.has(path)) next.delete(path);
   else next.add(path);
   collapsed.value = next;
+}
+
+/** Collapses the given folders, or expands every folder when none is given. */
+function setAllCollapsed(paths: string[] = []) {
+  collapsed.value = new Set(paths);
 }
 
 function openDocId(): number | undefined {
@@ -79,11 +84,19 @@ function DocumentsTab({ store }: { store: string }) {
     if (filter === "") return buildTree(docs);
     return buildTree(new Map([...docs].filter(([, d]) => matches(d, filter))));
   }, [docs, filter]);
+  const folders = useMemo(() => folderPaths(root), [root]);
+  const allCollapsed = folders.length > 0 && folders.every((p) => collapsed.value.has(p));
   const deleted = deletedDocs.value;
   return (
     <div class="documents">
-      <input type="search" class="filter" placeholder="Filter by path, description, tag" aria-label="Filter documents"
-        value={filter} onInput={(e) => setFilter((e.target as HTMLInputElement).value)} />
+      <div class="tree-tools">
+        <input type="search" class="filter" placeholder="Filter by path, description, tag" aria-label="Filter documents"
+          value={filter} onInput={(e) => setFilter((e.target as HTMLInputElement).value)} />
+        <button type="button" class="tree-toggle" disabled={filter !== "" || folders.length === 0}
+          onClick={() => setAllCollapsed(allCollapsed ? undefined : folders)}>
+          {allCollapsed ? "Expand all" : "Collapse all"}
+        </button>
+      </div>
       <ul class="tree" role="tree">
         <FolderContent store={store} node={root} filter={filter} />
       </ul>
