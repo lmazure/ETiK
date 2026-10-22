@@ -72,6 +72,7 @@ The labels `Type::Bug` and `ProdImpact::ToBeAnalyzed` are always set.
 
 - Run the script only when the user explicitly asked for that publication.
 - For `issue`, ask the user for the priority, the team (`AI`, `Performance`, `TestManagement`, `PCI`, or none), and whether the bug is a security issue or a draft, when they did not say. Do not guess.
+- When you ask whether to link the new issue to another one (`--related`), give the full URL of that issue (`https://gitlab.com/henixdevelopment/squash/squash-tm/core/squashtest-tm-staging/-/work_items/<iid>`) in the message text, so that the user can click it to open the issue in their browser: a URL inside a question option is not clickable.
 - Ask the user for the memory server URL and the store when they did not give them. Do not guess.
 - Run the script once per publication. Never rerun it after a success, because that would create a duplicate.
 - After a success, record the link on the issue report with `memory_edit`, when the `memory` MCP tools are available; otherwise tell the user the link was not recorded. Operation `set_metadata`, with `change_note: "gitlab: …"`:

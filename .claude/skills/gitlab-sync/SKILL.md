@@ -53,7 +53,9 @@ When unsure between "same bug" and "related", say so and propose "related": a du
 Show one table for all the reports: report path, title, proposal, candidate issues (`#iid` title, state, URL), and the reason in one sentence. Then ask:
 
 - which proposals to apply, or how to change them;
-- for each creation: the priority (`Highest`, `High`, `Medium`, `Low`, `Lowest`), the team (`AI`, `Performance`, `TestManagement`, `PCI`, or none), whether it is a security issue, and whether it is a draft. Do not guess.
+- for each creation: the priority (`Highest`, `High`, `Medium`, `Low`, `Lowest`), the team (`AI`, `Performance`, `TestManagement`, `PCI`, or none), whether it is a security issue, whether it is a draft, and whether to link it to the proposed related issues. Do not guess.
+
+Whenever you mention a candidate issue, in the table or in a question about linking it, give its full URL (`https://gitlab.com/henixdevelopment/squash/squash-tm/core/squashtest-tm-staging/-/work_items/<iid>`), not only `#iid` nor a base URL to complete, so that the user can click it to open the issue in their browser. Write it in the message text: a URL inside a question option is not clickable.
 
 Write nothing to GitLab before the user has answered.
 
