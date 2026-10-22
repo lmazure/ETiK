@@ -53,7 +53,7 @@ When unsure between "same bug" and "related", say so and propose "related": a du
 Show one table for all the reports: report path, title, proposal, candidate issues (`#iid` title, state, URL), and the reason in one sentence. Then ask:
 
 - which proposals to apply, or how to change them;
-- for each creation: the priority (`Highest`, `High`, `Medium`, `Low`, `Lowest`), whether it is a security issue, and whether it is a draft. Do not guess.
+- for each creation: the priority (`Highest`, `High`, `Medium`, `Low`, `Lowest`), the team (`AI`, `Performance`, `TestManagement`, `PCI`, or none), whether it is a security issue, and whether it is a draft. Do not guess.
 
 Write nothing to GitLab before the user has answered.
 
@@ -63,7 +63,7 @@ Create an issue:
 
 ```bash
 node .claude/skills/gitlab-publish/scripts/gitlab-publish.mjs issue /sessions/042/issues/007/issue.md \
-  --memory-url http://localhost:9501 --store squashtm --priority Medium [--security] [--draft] [--related 1234]...
+  --memory-url http://localhost:9501 --store squashtm --priority Medium [--team TestManagement] [--security] [--draft] [--related 1234]...
 ```
 
 Comment on an issue:

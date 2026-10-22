@@ -7,11 +7,12 @@ import { parseArgs } from "util";
 const GITLAB_URL = "https://gitlab.com";
 const PROJECT    = "henixdevelopment/squash/squash-tm/core/squashtest-tm-staging";
 const PRIORITIES = ["Highest", "High", "Medium", "Low", "Lowest"];
+const TEAMS      = ["AI", "Performance", "TestManagement", "PCI"];
 
 const USAGE = [
   "Usage:",
   "  gitlab-publish.mjs issue <memory path of issue.md> --memory-url <url> --store <store> --priority <Highest|High|Medium|Low|Lowest>",
-  "                     [--security] [--draft] [--related <iid>]... [--display]",
+  "                     [--team <AI|Performance|TestManagement|PCI>] [--security] [--draft] [--related <iid>]... [--display]",
   "  gitlab-publish.mjs note --iid <iid> --body-file <local file> --memory-url <url> --store <store> [--media-base <memory folder>] [--display]",
 ].join("\n");
 
@@ -42,6 +43,7 @@ function parseCli() {
         display:      { type: "boolean", default: false },
         ...(command === "issue" ? {
           priority: { type: "string" },
+          team:     { type: "string" },
           security: { type: "boolean", default: false },
           draft:    { type: "boolean", default: false },
           related:  { type: "string", multiple: true, default: [] },
@@ -78,8 +80,14 @@ function parseCli() {
     const priority = PRIORITIES.find(p => p.toLowerCase() === values.priority.toLowerCase());
     if (!priority) fail(`invalid priority "${values.priority}" (expected one of ${PRIORITIES.join(", ")})`);
 
+    let team;
+    if (values.team !== undefined) {
+      team = TEAMS.find(t => t.toLowerCase() === values.team.toLowerCase());
+      if (!team) fail(`invalid team "${values.team}" (expected one of ${TEAMS.join(", ")})`);
+    }
+
     const related = values.related.map(r => parseIid(r, "--related"));
-    return { ...common, file, priority, security: values.security, draft: values.draft, related };
+    return { ...common, file, priority, team, security: values.security, draft: values.draft, related };
   }
 
   if (positionals.length !== 0) fail(`unexpected argument: ${positionals[0]}\n${USAGE}`);
@@ -297,6 +305,7 @@ async function publishIssue(opts) {
     "Type::Bug",
     "ProdImpact::ToBeAnalyzed",
     `Priority::${opts.priority}`,
+    ...(opts.team ? [`Team::${opts.team}`] : []),
     opts.draft ? "Status::Draft" : "Status::Backlog",
     ...(opts.security ? ["Security"] : []),
   ];

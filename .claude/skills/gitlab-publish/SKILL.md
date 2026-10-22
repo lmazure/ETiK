@@ -39,6 +39,7 @@ Common to both commands:
 |------|----------|--------|
 | `<memory path>` | yes | Absolute path of the issue report in the store, e.g. `/sessions/042/issues/007/issue.md`. |
 | `--priority <Highest\|High\|Medium\|Low\|Lowest>` | yes | Sets the `Priority::<P>` label. |
+| `--team <AI\|Performance\|TestManagement\|PCI>` | no | Sets the `Team::<T>` label. Without it, no team label. |
 | `--security` | no | Adds the `Security` label and makes the issue confidential. |
 | `--draft` | no | Sets `Status::Draft` and assigns the issue to the token owner. Without it: `Status::Backlog`, unassigned. |
 | `--related <iid>` | no | Links the new issue to that issue of the project (`relates_to`). Repeat it for several issues. |
@@ -70,7 +71,7 @@ The labels `Type::Bug` and `ProdImpact::ToBeAnalyzed` are always set.
 ## Rules
 
 - Run the script only when the user explicitly asked for that publication.
-- For `issue`, ask the user for the priority, and whether the bug is a security issue or a draft, when they did not say. Do not guess.
+- For `issue`, ask the user for the priority, the team (`AI`, `Performance`, `TestManagement`, `PCI`, or none), and whether the bug is a security issue or a draft, when they did not say. Do not guess.
 - Ask the user for the memory server URL and the store when they did not give them. Do not guess.
 - Run the script once per publication. Never rerun it after a success, because that would create a duplicate.
 - After a success, record the link on the issue report with `memory_edit`, when the `memory` MCP tools are available; otherwise tell the user the link was not recorded. Operation `set_metadata`, with `change_note: "gitlab: …"`:

@@ -124,7 +124,7 @@ Then ask, e.g. "sync /sessions/042/ with GitLab" or "sync /sessions/042/issues/0
 - a comment on an open issue that describes the same bug, with what the report adds;
 - a new issue otherwise, linked to the related issues (a closed issue describing the same bug is a possible regression).
 
-It asks you the priority, security and draft flags of each new issue, then creates the issues and posts the comments with their screenshots (`gitlab-publish`), and records the GitLab URL in the metadata of the issue report (`gitlab_issue`, `gitlab_link`). A report that already has a URL is skipped, and `gitlab-publish` refuses to publish it again.
+It asks you the priority, team, security and draft flags of each new issue, then creates the issues and posts the comments with their screenshots (`gitlab-publish`), and records the GitLab URL in the metadata of the issue report (`gitlab_issue`, `gitlab_link`). A report that already has a URL is skipped, and `gitlab-publish` refuses to publish it again.
 
 To publish a single report without searching, ask e.g. "publish /sessions/042/issues/007/issue.md in GitLab" (`gitlab-publish` skill).
 
