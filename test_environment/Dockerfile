@@ -58,9 +58,9 @@ COPY --from=build /app/dist /opt/etik/server/dist
 COPY --chmod=0755 init-firewall.sh entrypoint.sh /usr/local/bin/
 
 # Claude Code runs as node in /workspace; its login and settings live in the
-# claude-config volume. The uploaded configurations stay root-only.
-RUN mkdir -p /workspace /home/node/.claude /var/lib/etik \
- && chown node:node /workspace /home/node/.claude \
+# claude-config volume, the repositories it clones in the repos volume. The uploaded configurations stay root-only.
+RUN mkdir -p /workspace /home/node/.claude /repos /var/lib/etik \
+ && chown node:node /workspace /home/node/.claude /repos \
  && chmod 0700 /var/lib/etik
 
 ENV ETIK_PORT=7681 \

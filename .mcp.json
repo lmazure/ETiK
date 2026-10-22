@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "gitlab": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@zereight/mcp-gitlab@2.3.1"],
+      "env": {
+        "GITLAB_PERSONAL_ACCESS_TOKEN": "${GITLAB_TOKEN:-}",
+        "GITLAB_API_URL": "https://gitlab.com",
+        "GITLAB_TOOLSETS": "issues"
+      }
+    },
+    "memory": {
+      "type": "http",
+      "url": "${MEMORY_URL:-http://localhost:9501}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MEMORY_AGENT_TOKEN:-}",
+        "X-Memory-Store": "squashtm"
+      }
+    }
+  }
+}

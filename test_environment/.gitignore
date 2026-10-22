@@ -1,3 +1,5 @@
 *.png
 /workspace/
+/workspace-*/
 memory.env
+gitlab.env

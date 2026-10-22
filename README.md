@@ -36,6 +36,29 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
   - The agent reaches it through MCP (`memory_*` tools), and uploads screenshots through its REST API (`memory-upload` skill), with a token limited to its own store.
   - You watch it live in a read-only web app.
 
+The bugs found then go to GitLab, and GitLab issues can be analysed against the code:
+
+```
+ Host                                                               Internet
+┌─────────────────────────────────────────────────────────────┐
+│ Claude Code at the root of this repository                  │
+│ gitlab-sync, gitlab-post-analysis ──────────────────────────┼──► GitLab: issues, comments,
+│   │ memory MCP, REST (read)                                 │    Draft MRs, each approved
+│   ▼                                                         │    by you
+│ Memory server :9501                                         │
+│ /sessions/ (issue reports)    /analyses/ (analyses, fixes)  │
+│   ▲ MCP, REST                                               │
+│ ┌─┴─────────────────────────────────────┐                   │
+│ │ Analysis instance of the test         │ ──────────────────┼──► GitLab, read-only:
+│ │ container (gitlab-analysis), YOLO,    │                   │    issues, git clone
+│ │ firewalled; code in a Docker volume   │                   │
+│ └───────────────────────────────────────┘                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+- **Claude Code on the host**, started at the root of this repository, does every write to GitLab, and each one waits for your approval: it creates issues from the issue reports of the memory server, or comments on the existing ones (`gitlab-sync`), and posts the analyses and their Draft merge requests (`gitlab-post-analysis`).
+- **The analysis instance** is a second instance of the test container, running the configuration `test-configurations/gitlab-analysis/`. With a read-only GitLab token, it reads an issue, clones the private code into a Docker volume, finds the cause of the bug, and writes its analysis, a proposed fix and further tests to the memory server. It cannot write anything to GitLab.
+
 ## Usage example
 
 ### 1) Start SquashTM
@@ -80,6 +103,43 @@ See `memory_server/README.md` for the server and the web app, and `memory_server
 
 See `test_environment/README.md` for more details.
 
-### 4) Publish a bug in GitLab
+### 4) Sync the issues with GitLab
 
-From this repository, on the host, ask Claude Code to publish a bug (e.g. "publish /sessions/042/issues/007/issue.md in GitLab"): the `report-bug` skill (`.claude/skills/report-bug/`) reads the issue report and its screenshots from the memory server. It needs `GITLAB_TOKEN` and `MEMORY_TOKEN` (the viewer token is enough) in the environment.
+Claude Code on the host, started from the root of this repository, does every write to GitLab, and each write waits for your approval. It uses:
+
+- the MCP servers of `.mcp.json`: `gitlab` ([`@zereight/mcp-gitlab`](https://www.npmjs.com/package/@zereight/mcp-gitlab), issue tools only) and `memory` (store `squashtm`); Claude Code asks you to approve them the first time. `.claude/settings.json` lets the read-only tools run without a prompt;
+- the skills of `.claude/skills/`: `gitlab-sync` and `gitlab-publish`.
+
+Set in the environment before starting Claude Code:
+
+| Variable | Value |
+|---|---|
+| `GITLAB_TOKEN` | A GitLab token with the `api` scope on the SquashTM staging project |
+| `MEMORY_AGENT_TOKEN` | An agent token of the store `squashtm` (the `memory` MCP server refuses the viewer token) |
+| `MEMORY_TOKEN` | A memory server token that reads the store, for `gitlab-publish` (the viewer token is enough) |
+| `MEMORY_URL` | Optional, `http://localhost:9501` by default |
+
+Then ask, e.g. "sync /sessions/042/ with GitLab" or "sync /sessions/042/issues/007/issue.md with GitLab". For each issue report, the `gitlab-sync` skill searches GitLab, closed issues included, and proposes in one table:
+
+- a comment on an open issue that describes the same bug, with what the report adds;
+- a new issue otherwise, linked to the related issues (a closed issue describing the same bug is a possible regression).
+
+It asks you the priority, security and draft flags of each new issue, then creates the issues and posts the comments with their screenshots (`gitlab-publish`), and records the GitLab URL in the metadata of the issue report (`gitlab_issue`, `gitlab_link`). A report that already has a URL is skipped, and `gitlab-publish` refuses to publish it again.
+
+To publish a single report without searching, ask e.g. "publish /sessions/042/issues/007/issue.md in GitLab" (`gitlab-publish` skill).
+
+### 5) Analyse a GitLab issue
+
+1. Fill in `test-configurations/gitlab-analysis/files/code-projects.md` with the GitLab projects holding the code of SquashTM.
+2. Give the analysis agent a **read-only** GitLab token: copy `test_environment/gitlab.env.example` to `test_environment/gitlab.env` and set `GITLAB_READ_TOKEN` (scopes `read_api` and `read_repository` only, e.g. a group access token with the Reporter role).
+3. Start a second instance of the test container, next to the testing one:
+   ```bash
+   cd test_environment
+   ETIK_CONTAINER=etik-analysis ETIK_PORT=7682 ETIK_WORKSPACE=./workspace-analysis docker compose -p etik-analysis up -d --build
+   ```
+4. Open `http://localhost:7682`, upload `test-configurations/gitlab-analysis`, start Claude Code (log in the first time), and ask e.g. "analyse #1234". It writes `/analyses/1234/analysis.md` (root cause with permalinks to the code, suggested fix, further tests as Exploratory Test Charters) and, when the fix is small, `/analyses/1234/fix.diff`.
+5. On the host, ask Claude Code e.g. "post the analysis of #1234". The `gitlab-post-analysis` skill shows you the analysis and the diff, then, with your approval:
+   - opens a Draft merge request from `fix.diff`, on a new branch `etik/1234-…` of the code project (`GITLAB_TOKEN` then needs the Developer role on that project);
+   - posts the analysis as a comment on the issue, with the link to the merge request.
+
+The agent cannot build the code or run the tests: review the merge request, build it and run the tests before marking it ready.

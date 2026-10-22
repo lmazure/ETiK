@@ -9,6 +9,8 @@ On the host, what the configuration needs: the application under test and, usual
 
 Copy `memory.env.example` to `memory.env` and set `MEMORY_AGENT_TOKEN` to that agent token (the value after `<store>=` in `MEMORY_AGENT_TOKENS` of `../memory_server/.env`; a token listed there for several stores reaches all of them). `memory.env` is gitignored. Its variables are passed to Claude Code only when the configuration lists them in `env`; it only holds the agent's own token, the admin token stays outside the container.
 
+A configuration that reads GitLab (e.g. `../test-configurations/gitlab-analysis/`) needs `gitlab.env` too: copy `gitlab.env.example` to `gitlab.env` (gitignored) and set `GITLAB_READ_TOKEN` to a **read-only** GitLab token (scopes `read_api` and `read_repository` only, e.g. a group access token with the Reporter role). Never give a token that can write: Claude Code runs unsupervised in the container.
+
 ## Usage
 
 1. Build and start the container:
@@ -31,7 +33,15 @@ Copy `memory.env.example` to `memory.env` and set `MEMORY_AGENT_TOKEN` to that a
 
 Reloading the page reattaches to the running Claude Code. Only one Claude Code runs at a time.
 
-What Claude Code writes stays in `workspace/` on the host (gitignored), from one run to the next. How it is organized is up to the configuration's system prompt.
+To run another configuration at the same time (e.g. testing in one instance and analysing GitLab issues in another), start a second instance with its own name, port and Docker Compose project:
+
+```bash
+ETIK_CONTAINER=etik-analysis ETIK_PORT=7682 ETIK_WORKSPACE=./workspace-analysis docker compose -p etik-analysis up -d --build
+```
+
+It has its own workspace (each start of Claude Code reinstalls the skills of the workspace) and its own volumes, so you log in to Claude again in it and upload its configuration there. Both read `memory.env` and `gitlab.env`. Open it on `http://localhost:7682`.
+
+What Claude Code writes stays in `workspace/` on the host (gitignored), from one run to the next. The repositories it clones go to `/repos/`, the `repos` volume, which stays in Docker: private code never lands in `workspace/`. How it is organized is up to the configuration's system prompt.
 
 To watch the memory while the agent works, open `http://localhost:9501/` on the host and log in with the viewer token (`MEMORY_VIEWER_TOKEN` in `../memory_server/.env`).
 

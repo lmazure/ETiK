@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__gitlab__list_issues",
+      "mcp__gitlab__get_issue",
+      "mcp__gitlab__list_issue_discussions",
+      "mcp__gitlab__list_issue_links",
+      "mcp__memory__memory_list",
+      "mcp__memory__memory_read",
+      "mcp__memory__memory_search",
+      "mcp__memory__memory_history"
+    ]
+  }
+}
