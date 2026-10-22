@@ -70,7 +70,7 @@ Publish it on host port 8090: the agent expects it at `http://host.docker.intern
 docker compose up -d
 ```
 
-Check that `http://localhost:8090/squash/login` answers, and that you can log in as `admin` / `admin`.
+Check that [`http://localhost:8090/squash/login`](http://localhost:8090/squash/login) answers, and that you can log in as `admin` / `admin`.
 
 ### 2) Start the memory server
 
@@ -83,8 +83,8 @@ curl http://localhost:9501/health
 
 `.env` holds three tokens: admin (everything), viewer (the web app, read-only) and the agent token of the store `squashtm` (`MEMORY_AGENT_TOKENS=squashtm=…`).
 The memories are kept in the `memory-data` Docker volume.
-Open `http://localhost:9501/` and log in with the viewer token to watch the memory.
-See `memory_server/README.md` for the server and the web app, and `memory_server/API.md` for the tools and the REST API.
+Open [`http://localhost:9501/`](http://localhost:9501/) and log in with the viewer token to watch the memory.
+See [`memory_server/README.md`](memory_server/README.md) for the server and the web app, and `memory_server/API.md` for the tools and the REST API.
 
 ### 3) Run Exploratory Tests in the test container
 
@@ -95,13 +95,13 @@ See `memory_server/README.md` for the server and the web app, and `memory_server
    docker compose up -d --build
    ```
    Only `test_environment/workspace/` is mounted in the container, which keeps the memory server's admin token out of the agent's reach.
-3. Open `http://localhost:7681` (the ETiK console), click **Upload configuration folder…** and pick `test-configurations/squashtm`.
+3. Open [`http://localhost:7681`](http://localhost:7681) (the ETiK console), click **Upload configuration folder…** and pick `test-configurations/squashtm`.
 4. Select the configuration and click **Start Claude Code**.
    - The console opens the firewall to the configuration's domains and host ports, checks the memory server and the token, then starts Claude Code in the web terminal.
    - The first time, log in with your Claude subscription and accept the prompts; the login is kept in a Docker volume.
 5. Give Claude Code an Exploratory Test Charter (or let it ask you for one), and follow the Session in the memory web app: it creates the next `/sessions/NNN/` folder, proposes a charter, builds a checklist, tests, writes issue reports into `/sessions/NNN/issues/`, and records what it learns about SquashTM in `/knowledge/`.
 
-See `test_environment/README.md` for more details.
+See [`test_environment/README.md`](test_environment/README.md) for more details.
 
 ### 4) Sync the issues with GitLab
 
