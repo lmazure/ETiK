@@ -109,7 +109,9 @@ See [`analyst_server/README.md`](analyst_server/README.md) for the tools.
 
 ### 4) Run Exploratory Tests in the test container
 
-1. Give the agent its tokens: copy `test_environment/memory.env.example` to `test_environment/memory.env`, and set `MEMORY_AGENT_TOKEN` to the `squashtm` token from step 2; copy `test_environment/analyst.env.example` to `test_environment/analyst.env`, and set `ANALYST_TOKEN` to the one of step 3.
+1. Give the agent its tokens:
+   - copy `test_environment/memory.env.example` to `test_environment/memory.env`, and set `MEMORY_AGENT_TOKEN` to the `squashtm` agent token of step 2 (`MEMORY_AGENT_TOKENS` in `memory_server/.env`);
+   - copy `test_environment/analyst.env.example` to `test_environment/analyst.env`, and set `ANALYST_TOKEN` to the `ANALYST_TOKEN` of step 3 (in `analyst_server/.env`).
 2. Build and start the container:
    ```bash
    cd test_environment
