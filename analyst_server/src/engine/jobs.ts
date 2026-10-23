@@ -14,6 +14,8 @@ export interface JobOutcome {
   resultPath: string | undefined;
   commits: string[];
   warning: string | undefined;
+  /** Set when a stored result was returned instead of a new analysis: when and why it is still valid. */
+  reused?: string;
 }
 
 export interface Job {
@@ -59,21 +61,39 @@ export class JobQueue {
     this.now = options.now ?? Date.now;
   }
 
+  /** The queued or running job of a key. */
+  active(key: string): Job | undefined {
+    return [...this.jobs.values()].find((j) => j.key === key && (j.status === "queued" || j.status === "running"));
+  }
+
   /** Queues a task, or returns the queued or running job of the same key. */
   submit(kind: JobKind, target: string, key: string, task: Task): Job {
     this.forgetOld();
-    const existing = [...this.jobs.values()].find((j) => j.key === key && (j.status === "queued" || j.status === "running"));
+    const existing = this.active(key);
     if (existing) return existing;
     let settle!: () => void;
     const finished = new Promise<void>((resolve) => (settle = resolve));
-    const job: Job = {
-      id: `job-${randomBytes(4).toString("hex")}`, kind, target, key, status: "queued", createdAt: this.now(),
-      startedAt: undefined, endedAt: undefined, step: undefined, outcome: undefined, error: undefined, finished,
-    };
+    const job = this.create(kind, target, key, finished);
     this.jobs.set(job.id, job);
     this.waiting.push({ job, task, settle });
     this.next();
     return job;
+  }
+
+  /** Records a job that is already done, e.g. a stored result returned instead of a new analysis. */
+  completed(kind: JobKind, target: string, key: string, outcome: JobOutcome): Job {
+    this.forgetOld();
+    const now = this.now();
+    const job = { ...this.create(kind, target, key, Promise.resolve()), status: "done" as const, startedAt: now, endedAt: now, outcome };
+    this.jobs.set(job.id, job);
+    return job;
+  }
+
+  private create(kind: JobKind, target: string, key: string, finished: Promise<void>): Job {
+    return {
+      id: `job-${randomBytes(4).toString("hex")}`, kind, target, key, status: "queued", createdAt: this.now(),
+      startedAt: undefined, endedAt: undefined, step: undefined, outcome: undefined, error: undefined, finished,
+    };
   }
 
   get(id: string): Job {

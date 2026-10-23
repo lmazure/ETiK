@@ -54,6 +54,17 @@ describe("JobQueue", () => {
     expect(aborted).toBe(true);
   });
 
+  it("records a job that is already done, which does not block a new one", async () => {
+    const queue = new JobQueue({ maxJobs: 1, timeoutMs: 60_000 });
+    const done = queue.completed("fix_brief", "#1", "k", { ...outcome("stored"), reused: "analysed 2 h ago" });
+    expect(done).toMatchObject({ status: "done", outcome: { text: "stored", reused: "analysed 2 h ago" } });
+    expect(queue.get(done.id)).toBe(done);
+    expect(queue.active("k")).toBeUndefined();
+    const fresh = queue.submit("fix_brief", "#1", "k", async () => outcome("new"));
+    expect(fresh).not.toBe(done);
+    expect(queue.active("k")).toBe(fresh);
+  });
+
   it("forgets finished jobs after the retention time", async () => {
     let now = 1_000;
     const queue = new JobQueue({ maxJobs: 1, timeoutMs: 60_000, retentionMs: 100, now: () => now });

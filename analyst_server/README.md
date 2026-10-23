@@ -32,6 +32,7 @@ curl http://localhost:9502/health
 | `ANALYST_MCP_MAX_OUTPUT_CHARS` | Maximum size of one tool result, 40 000 characters by default; longer results end with `[truncated: N more characters not shown]`. |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Subscription token of the analyses' agent: run `claude setup-token` on the host. Without it, the `analyst_*` tools answer that they are not available; the `gitlab_*` tools still work. |
 | `ANALYST_MODEL` | Model of the analyses, `opus` by default. |
+| `ANALYST_REUSE_HOURS` | A stored result younger than this many hours, whose source has not changed, is returned instead of a new analysis; 24 by default, `0` never reuses. |
 | `ANALYST_MAX_JOBS` | Analyses run at the same time, 1 by default; the others wait in a queue. |
 | `ANALYST_JOB_TIMEOUT_MS` | Longest an analysis may run, 45 minutes by default. |
 | `ANALYST_REPO_GROUPS` | Groups whose projects the agent may check out, comma-separated; `henixdevelopment/squash/squash-tm/core,henixdevelopment/squash/squash-tm/tm-plugin` by default. |
@@ -210,11 +211,13 @@ henixdevelopment/squash/squash-tm/tm-plugin/api/henix-tm-api-rest-admin#5 · clo
 
 | Tool | Parameters | The analysis |
 |---|---|---|
-| `analyst_story_brief` | `ref`: a work item | For a user story: each acceptance criterion checked in the code (implemented, not found, not checkable), the hierarchy with what each item implements, the code changes and the features they touch, risks and suggested Exploratory Test Charters. |
-| `analyst_fix_brief` | `ref`: a work item | For a bug: the reported behavior, what each merge request changed and the root cause it addresses, whether it is in the analysed code, the impacted areas, the **dubious or wrong changes** with how to trigger them from the UI or the REST API, suggested tests. |
-| `analyst_investigate` | `issue_report`: the memory path of an issue report (`/sessions/NNN/issues/MMM/issue.md`); `description`: free text; at least one | For a problem found by the tester: verdict (confirmed, not confirmed, undecided by the code), root cause, other occurrences, larger impact, tests to run. |
+| `analyst_story_brief` | `ref`: a work item; `refresh` | For a user story: each acceptance criterion checked in the code (implemented, not found, not checkable), the hierarchy with what each item implements, the code changes and the features they touch, risks and suggested Exploratory Test Charters. |
+| `analyst_fix_brief` | `ref`: a work item; `refresh` | For a bug: the reported behavior, what each merge request changed and the root cause it addresses, whether it is in the analysed code, the impacted areas, the **dubious or wrong changes** with how to trigger them from the UI or the REST API, suggested tests. |
+| `analyst_investigate` | `issue_report`: the memory path of an issue report (`/sessions/NNN/issues/MMM/issue.md`); `work_item`: a GitLab issue reporting the problem; `description`: free text; at least one; `refresh` | For a problem found by the tester, or reported in GitLab (then written for the developers too, to be posted on the issue): verdict (confirmed, not confirmed, undecided by the code), root cause, other occurrences, larger impact, tests to run. |
 
-Each call starts a job, or joins the queued or running job of the same analysis. It returns when the job ends: in the tester, Claude Code moves the call to the background after 10 s and delivers the result as a notification. While it runs, the server sends a progress notification at once and every 30 s (`job-1a2b3c4d · fix brief · #8131 · running for 4 min, last step: git_blame …`). If the caller goes away, the job goes on.
+Each call starts a job, or joins the queued or running job of the same analysis, or **reuses a stored result**: unless `refresh` is `true`, when the result stored for the same work item or issue report is younger than `ANALYST_REUSE_HOURS` (24 h) and its source has not changed since (the work item's `updatedAt`, the report's memory version), the call returns it at once, with the status line `job-… · fix brief · #100 · reused: analysed 3 h ago, the work item has not changed since (refresh: true to analyse again) · result: …`. The commits may have moved since: the result names those it read. An investigation of a description is never reused.
+
+A new analysis returns when the job ends: in the tester, Claude Code moves the call to the background after 10 s and delivers the result as a notification. While it runs, the server sends a progress notification at once and every 30 s (`job-1a2b3c4d · fix brief · #8131 · running for 4 min, last step: git_blame …`). If the caller goes away, the job goes on.
 
 The result starts with the job's status line and the memory path where it is stored, then the analysis, ending with an `## Analysed code` section added by the server (each project and the full SHA of the commit read, the model):
 
@@ -229,12 +232,13 @@ job-1a2b3c4d · fix brief · #100 · done in 6 min · result: /analyses/work-ite
 - Analysed by opus (ETiK analyst, job job-1a2b3c4d, 31 turns), from GitLab and the code only: no build, no test run.
 ```
 
-Results in the memory store (overwritten when the analysis is run again; the memory server keeps the previous versions), tagged `analysis` and `story-brief` / `fix-brief` / `investigation`, with the metadata `kind`, `job_id`, `target`, `commits`, `model`, and a change note `analyst: …`:
+Results in the memory store (overwritten when the analysis is run again; the memory server keeps the previous versions), tagged `analysis` and `story-brief` / `fix-brief` / `investigation`, with the metadata `kind`, `job_id`, `target`, `commits`, `model`, `work_item_updated_at` (analyses of a work item) or `source_version` (investigations of an issue report), and a change note `analyst: …`:
 
 ```
 /analyses/work-items/<iid>/story-brief.md        <iid> in the default project, else <project>-<iid>
 /analyses/work-items/<iid>/fix-brief.md
 /analyses/sessions/NNN/issues/MMM/analysis.md    investigation of /sessions/NNN/issues/MMM/issue.md
+/analyses/work-items/<iid>/analysis.md           investigation of a GitLab issue (work_item, without issue_report)
 /analyses/jobs/<job-id>/analysis.md              investigation of a description
 ```
 
@@ -266,7 +270,7 @@ A failing call returns `isError: true` and one line `Error: …` that says what 
 | Token refused or not allowed | `GitLab rejected the analyst's token (401…); the administrator must renew GITLAB_READ_TOKEN.` / `… cannot read this (403…)` |
 | GitLab down, slow or rate-limited | `GitLab is unreachable (…)`, `GitLab failed (5xx)`, `GitLab rate limit reached (429)…` (one retry after `Retry-After` first) |
 | Analyses not configured | `The analyses are not available: the analyst server has no CLAUDE_CODE_OAUTH_TOKEN…` |
-| Bad investigation request | `Give issue_report … or description, or both.`, `'…' is not the path of an issue report…` |
+| Bad investigation request | `Give issue_report …, work_item … or description, or several of them.`, `'…' is not the path of an issue report…` |
 | Failed analysis | `Job job-… (fix brief of #100) failed: <reason>` (agent error, `timed out after 45 min`, unreadable issue report…) |
 | Unknown job | `No job 'job-…': it never existed, was finished more than a day ago, or the analyst server restarted…` |
 

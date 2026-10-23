@@ -82,7 +82,7 @@ async function waitFor(job: Job, engine: Engine, extra: Extra): Promise<void> {
 }
 
 async function analyse(engine: Engine, request: AnalysisRequest, extra: Extra): Promise<string> {
-  const job = engine.analyses.start(request);
+  const job = await engine.analyses.start(request);
   await waitFor(job, engine, extra);
   if (job.status === "failed") {
     throw new AnalystError("ANALYSIS_FAILED", `Job ${job.id} (${job.kind.replace("_", " ")} of ${job.target}) failed: ${job.error}`);
@@ -112,12 +112,12 @@ export function buildMcpServer(services: Services, engine: Engine, logger: Fasti
     }));
 
   server.registerTool("analyst_story_brief", { ...meta("analyst_story_brief"), inputSchema: tools.analyst_story_brief.schema },
-    async (args, extra) => run(logger, maxOutputChars, () => analyse(engine, { kind: "story_brief", ref: args.ref }, extra as Extra)));
+    async (args, extra) => run(logger, maxOutputChars, () => analyse(engine, { kind: "story_brief", ref: args.ref, refresh: args.refresh }, extra as Extra)));
   server.registerTool("analyst_fix_brief", { ...meta("analyst_fix_brief"), inputSchema: tools.analyst_fix_brief.schema },
-    async (args, extra) => run(logger, maxOutputChars, () => analyse(engine, { kind: "fix_brief", ref: args.ref }, extra as Extra)));
+    async (args, extra) => run(logger, maxOutputChars, () => analyse(engine, { kind: "fix_brief", ref: args.ref, refresh: args.refresh }, extra as Extra)));
   server.registerTool("analyst_investigate", { ...meta("analyst_investigate"), inputSchema: tools.analyst_investigate.schema },
     async (args, extra) => run(logger, maxOutputChars, () =>
-      analyse(engine, { kind: "investigation", issueReport: args.issue_report, description: args.description }, extra as Extra)));
+      analyse(engine, { kind: "investigation", issueReport: args.issue_report, workItem: args.work_item, description: args.description, refresh: args.refresh }, extra as Extra)));
   server.registerTool("analyst_job", { ...meta("analyst_job"), inputSchema: tools.analyst_job.schema },
     async (args) => run(logger, maxOutputChars, async () => {
       const now = Date.now();

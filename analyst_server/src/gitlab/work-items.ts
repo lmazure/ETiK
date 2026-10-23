@@ -159,6 +159,11 @@ query AnalystRelatedMergeRequests($fullPath: ID!, $iid: String!) {
   }
 }`;
 
+export const UPDATED_AT_QUERY = `
+query AnalystWorkItemUpdatedAt($fullPath: ID!, $iid: String!) {
+  namespace(fullPath: $fullPath) { workItem(iid: $iid) { iid title state webUrl workItemType { name } updatedAt widgets { type } } }
+}`;
+
 /* Raw GraphQL shapes: only what is read. Every widget field is optional, as widgets vary by work item type. */
 interface RawWidget {
   type: string;
@@ -296,6 +301,11 @@ export class WorkItems {
       const urls = new Set(known.map((mr) => mr.webUrl));
       item.mergeRequestStates = [...known, ...related.filter((mr) => !urls.has(mr.webUrl))].map((mr) => mr.state);
     });
+  }
+
+  /** When the work item was last updated (its description, labels, comments…). */
+  async updatedAt(ref: Ref): Promise<string> {
+    return (await this.fetch(UPDATED_AT_QUERY, ref)).updatedAt ?? "";
   }
 
   async get(ref: Ref, maxComments: number): Promise<WorkItem> {

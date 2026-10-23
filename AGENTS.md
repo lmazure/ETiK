@@ -37,5 +37,5 @@ When in doubt, run the server and check the real outputs against the document.
 ## Keep the analyst server tool reference up to date
 
 The "Tools" section of [`analyst_server/README.md`](analyst_server/README.md) documents the MCP tools of the analyst container. **Any change under `analyst_server/` that changes what a caller sees must update it in the same commit**: tool names, descriptions, parameters and defaults ([`src/schemas.ts`](analyst_server/src/schemas.ts)), the text results ([`src/mcp/format.ts`](analyst_server/src/mcp/format.ts)), error messages, tokens and environment variables ([`src/config.ts`](analyst_server/src/config.ts)).
-When a tool is added, renamed or removed, also update the tool names used in [`test-configurations/squashtm/system-prompt.md`](test-configurations/squashtm/system-prompt.md).
+When a tool is added, renamed or removed, also update the tool names used in [`test-configurations/squashtm/system-prompt.md`](test-configurations/squashtm/system-prompt.md), in the host skills [`.claude/skills/gitlab-post-analysis/SKILL.md`](.claude/skills/gitlab-post-analysis/SKILL.md) and [`.claude/skills/gitlab-sync/SKILL.md`](.claude/skills/gitlab-sync/SKILL.md), and in the allowlist of [`.claude/settings.json`](.claude/settings.json).
 Run `npm test` in `analyst_server/`.

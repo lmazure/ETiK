@@ -53,14 +53,15 @@ The bugs found then go to GitLab:
 ┌─────────────────────────────────────────────────────────────┐
 │ Claude Code at the root of this repository                  │
 │ gitlab-sync, gitlab-post-analysis ──────────────────────────┼──► GitLab: issues, comments,
-│   │ memory MCP, REST (read)                                 │    Draft MRs, each approved
-│   ▼                                                         │    by you
-│ Memory server :9501                                         │
-│ /sessions/ (issue reports)    /analyses/ (analyses, fixes)  │
+│   │ memory MCP, REST (read)      │ analyst MCP              │    each approved by you
+│   ▼                              ▼                          │
+│ Memory server :9501            Analyst server :9502         │
+│ /sessions/ (issue reports)     analyses of GitLab issues,   │
+│ /analyses/ (analyses)          written to /analyses/        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- **Claude Code on the host**, started at the root of this repository, does every write to GitLab, and each one waits for your approval: it creates issues from the issue reports of the memory server, or comments on the existing ones (`gitlab-sync`), and posts the analyses and their Draft merge requests (`gitlab-post-analysis`).
+- **Claude Code on the host**, started at the root of this repository, does every write to GitLab, and each one waits for your approval: it creates issues from the issue reports of the memory server, or comments on the existing ones (`gitlab-sync`), and posts the analyst's investigations on the issues (`gitlab-post-analysis`): those of the tester's issue reports, and those of GitLab issues it asks the analyst for.
 
 ## Usage example
 
@@ -130,8 +131,8 @@ See [`test_environment/README.md`](test_environment/README.md) for more details.
 
 Claude Code on the host, started from the root of this repository, does every write to GitLab, and each write waits for your approval. It uses:
 
-- the MCP servers of `.mcp.json`: `gitlab` ([`@zereight/mcp-gitlab`](https://www.npmjs.com/package/@zereight/mcp-gitlab), issue tools only) and `memory` (store `squashtm`); Claude Code asks you to approve them the first time. `.claude/settings.json` lets the read-only tools run without a prompt;
-- the skills of `.claude/skills/`: `gitlab-sync` and `gitlab-publish`.
+- the MCP servers of `.mcp.json`: `gitlab` ([`@zereight/mcp-gitlab`](https://www.npmjs.com/package/@zereight/mcp-gitlab), issue tools only), `memory` (store `squashtm`) and `analyst` (the analyst server of step 3); Claude Code asks you to approve them the first time. `.claude/settings.json` lets the read-only tools run without a prompt (an analysis, which spends tokens, still asks), and moves analyses to the background after 10 s;
+- the skills of `.claude/skills/`: `gitlab-sync`, `gitlab-publish` and `gitlab-post-analysis`.
 
 Set in the environment before starting Claude Code:
 
@@ -141,22 +142,22 @@ Set in the environment before starting Claude Code:
 | `MEMORY_AGENT_TOKEN` | An agent token of the store `squashtm` (the `memory` MCP server refuses the viewer token) |
 | `MEMORY_TOKEN` | A memory server token that reads the store, for `gitlab-publish` (the viewer token is enough) |
 | `MEMORY_URL` | Optional, `http://localhost:9501` by default |
+| `ANALYST_TOKEN` | The `ANALYST_TOKEN` of `analyst_server/.env` |
+| `ANALYST_URL` | Optional, `http://localhost:9502` by default |
 
 Then ask, e.g. "sync /sessions/042/ with GitLab" or "sync /sessions/042/issues/007/issue.md with GitLab". For each issue report, the `gitlab-sync` skill searches GitLab, closed issues included, and proposes in one table:
 
 - a comment on an open issue that describes the same bug, with what the report adds;
 - a new issue otherwise, linked to the related issues (a closed issue describing the same bug is a possible regression).
 
-It asks you the priority, team, security and draft flags of each new issue, then creates the issues and posts the comments with their screenshots (`gitlab-publish`), and records the GitLab URL in the metadata of the issue report (`gitlab_issue`, `gitlab_link`). A report that already has a URL is skipped, and `gitlab-publish` refuses to publish it again.
+It shows the analyst's investigation of each report when the tester asked for one (whether the code confirms the problem), asks you the priority, team, security and draft flags of each new issue, then creates the issues and posts the comments with their screenshots (`gitlab-publish`), and records the GitLab URL in the metadata of the issue report (`gitlab_issue`, `gitlab_link`). A report that already has a URL is skipped, and `gitlab-publish` refuses to publish it again. If you want, it then posts the investigation on the issue, after you review it (`gitlab-post-analysis`).
 
 To publish a single report without searching, ask e.g. "publish /sessions/042/issues/007/issue.md in GitLab" (`gitlab-publish` skill).
 
-### 6) Post an analysis on GitLab
+### 6) Analyse a GitLab issue
 
-An analysis of GitLab issue `#<iid>` is stored in the memory server as `/analyses/<iid>/analysis.md`, with, optionally, a proposed fix `/analyses/<iid>/fix.diff`. The way to produce these analyses is being redefined.
+On the host, ask Claude Code e.g. "analyse #1234": the `gitlab-post-analysis` skill asks the analyst for an investigation of the issue (`analyst_investigate`, a few minutes in the background), stored in `/analyses/work-items/1234/analysis.md`. A recent analysis of the unchanged issue is reused instead (ask for a new one to force it).
 
-On the host, ask Claude Code e.g. "post the analysis of #1234". The `gitlab-post-analysis` skill shows you the analysis and the diff, then, with your approval:
-- opens a Draft merge request from `fix.diff`, on a new branch `etik/1234-…` of the code project (`GITLAB_TOKEN` then needs the Developer role on that project);
-- posts the analysis as a comment on the issue, with the link to the merge request.
+Then, or later ("post the analysis of #1234"), it shows you the analysis, points out what looks doubtful, and, with your approval, posts it as a comment on the issue, saying it was written by an AI agent from the issue and the code only. The same skill posts the investigations of the tester's issue reports, from `gitlab-sync`.
 
-The fix is neither built nor tested: review the merge request, build it and run the tests before marking it ready.
+The analyst neither builds the code nor runs tests: its verdicts and root causes are leads to check, not proofs.

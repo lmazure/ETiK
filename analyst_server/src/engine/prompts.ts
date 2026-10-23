@@ -134,10 +134,16 @@ Read it with gitlab_work_item (the comments often tell how it was reproduced and
 
 ${template}`;
     case "investigation": {
-      const parts = ["The tester found a problem while testing SquashTM and asks you to analyse it in the code: confirm or deny it, find its root cause, other occurrences, and a larger impact worth testing."];
+      const parts = [input.issueReport || input.description
+        ? "The tester found a problem while testing SquashTM and asks you to analyse it in the code: confirm or deny it, find its root cause, other occurrences, and a larger impact worth testing."
+        : `Analyse in the code the problem reported in the GitLab work item ${input.reference}: confirm or deny it, find its root cause, other occurrences, and a larger impact worth testing.`];
+      if (input.reference) {
+        parts.push(`The problem is reported in the GitLab work item ${input.reference}: read it with gitlab_work_item (its description, comments and linked items), and the merge requests already attached to it. Your analysis may be posted on that issue for the developers, after review: write it for them as well as for the tester.`);
+      }
       if (input.issueReport) parts.push(`Its issue report (${input.issueReport.path}), written by the tester:\n\n${data("issue_report", input.issueReport.content)}`);
       if (input.description) parts.push(`The tester's description:\n\n${data("description", input.description)}`);
-      parts.push("Look for an existing GitLab issue about it with gitlab_search, and mention it. Check out squashtest-tm-staging (and a plugin if the feature lives there), find the entry point of the trigger (REST controller, backend service of the page, front-end component), and follow the path to the faulty behavior.");
+      if (!input.reference) parts.push("Look for an existing GitLab issue about it with gitlab_search, and mention it.");
+      parts.push("Check out squashtest-tm-staging (and a plugin if the feature lives there), find the entry point of the trigger (REST controller, backend service of the page, front-end component), and follow the path to the faulty behavior.");
       parts.push(template);
       return parts.join("\n\n");
     }

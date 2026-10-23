@@ -30,6 +30,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     memoryUrl: "http://memory.test",
     memoryToken: "memory-secret",
     memoryStore: "squashtm",
+    reuseHours: 24,
     ...overrides,
   };
 }
@@ -153,7 +154,18 @@ export interface FakeGitLab {
   /** Responses to serve first, before the routes: e.g. errors. */
   queue: Response[];
   /** Documents of the fake memory server (http://memory.test), by path. */
-  memory: Map<string, { content: string; body?: Record<string, unknown> }>;
+  memory: Map<string, MemoryDoc>;
+  /** `updatedAt` of the work items, by `path#iid` (default 2026-10-20T08:00:00Z). */
+  updatedAt: Map<string, string>;
+  /** The clock of the fake memory server's `updated_at`. */
+  now: () => number;
+}
+
+export interface MemoryDoc {
+  content: string;
+  body?: Record<string, unknown>;
+  version: number;
+  updatedAt: string;
 }
 
 export const ISSUE_REPORT = "/sessions/003/issues/002/issue.md";
@@ -164,25 +176,31 @@ function memoryServer(fake: FakeGitLab, url: URL, method: string, headers: Heade
   if (!url.pathname.startsWith(prefix)) return json({ error: { message: "not found" } }, 404);
   const path = decodeURIComponent(url.pathname.slice(prefix.length));
   const existing = fake.memory.get(path);
-  if (method === "GET") return existing ? json({ path, content: existing.content }) : json({ error: { message: `${path} not found` } }, 404);
+  if (method === "GET") {
+    return existing
+      ? json({ path, content: existing.content, version: existing.version, metadata: existing.body?.metadata ?? {}, updated_at: existing.updatedAt })
+      : json({ error: { message: `${path} not found` } }, 404);
+  }
   const parsed = JSON.parse(body ?? "{}") as Record<string, unknown>;
   const create = headers.get("if-none-match") === "*";
   if (create && existing) return json({ error: { message: "exists" } }, 409);
   if (!create && !existing) return json({ error: { message: "not found" } }, 404);
-  fake.memory.set(path, { content: String(parsed.file_text), body: parsed });
-  return json({ path, version: 1, created: create }, create ? 201 : 200);
+  const version = (existing?.version ?? 0) + 1;
+  fake.memory.set(path, { content: String(parsed.file_text), body: parsed, version, updatedAt: new Date(fake.now()).toISOString() });
+  return json({ path, version, created: create }, create ? 201 : 200);
 }
 
 export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });
 }
 
-function graphql(operation: string | undefined, variables: Record<string, unknown>): unknown {
+function graphql(fake: FakeGitLab, operation: string | undefined, variables: Record<string, unknown>): unknown {
   const key = `${variables.fullPath}#${variables.iid}`;
   const workItem = (item: unknown) => ({ data: { namespace: { workItem: item ?? null } } });
   switch (operation) {
     case "AnalystWorkItem": return workItem(key === `${STAGING}#100` ? workItem100 : undefined);
     case "AnalystWorkItemFamily": return workItem(families[key]);
+    case "AnalystWorkItemUpdatedAt": return workItem({ updatedAt: fake.updatedAt.get(key) ?? "2026-10-20T08:00:00Z", widgets: [] });
     case "AnalystRelatedMergeRequests":
       return workItem({ widgets: [{ type: "DEVELOPMENT", relatedMergeRequests: { nodes: (related[key] ?? []).map((mr) => ({ iid: String(mr.iid), state: mr.state, webUrl: mrUrl(STAGING, mr.iid) })) } }] });
     default: return { errors: [{ message: `unknown operation ${operation}` }] };
@@ -208,7 +226,9 @@ export function fakeGitLab(): FakeGitLab {
   const fake: FakeGitLab = {
     requests: [],
     queue: [],
-    memory: new Map([[ISSUE_REPORT, { content: "# [Export] The export fails\n\n## Steps to Reproduce\n\n1. Click Export." }]]),
+    memory: new Map([[ISSUE_REPORT, { content: "# [Export] The export fails\n\n## Steps to Reproduce\n\n1. Click Export.", version: 3, updatedAt: "2026-10-22T10:00:00Z" }]]),
+    updatedAt: new Map(),
+    now: Date.now,
     fetch: (async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : input);
       const headers = new Headers(init?.headers);
@@ -221,7 +241,7 @@ export function fakeGitLab(): FakeGitLab {
       fake.requests.push({ method: init?.method ?? "GET", url, authorization: headers.get("authorization") ?? undefined, operation, variables: body?.variables });
       const queued = fake.queue.shift();
       if (queued) return queued;
-      if (url.pathname === "/api/graphql") return json(graphql(operation, body?.variables ?? {}));
+      if (url.pathname === "/api/graphql") return json(graphql(fake, operation, body?.variables ?? {}));
       return rest(url);
     }) as typeof fetch,
   };

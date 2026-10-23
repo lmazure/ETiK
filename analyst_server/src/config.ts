@@ -32,6 +32,16 @@ export interface Config {
   /** Agent token of the memory store; without it, results are not stored and issue reports cannot be read. */
   memoryToken: string | undefined;
   memoryStore: string;
+  /** A stored result younger than this (hours), whose source has not changed, is reused; 0 never reuses. */
+  reuseHours: number;
+}
+
+function nonNegative(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const raw = env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) throw new Error(`${name} must be a number of 0 or more, got '${raw}'`);
+  return value;
 }
 
 function integer(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
@@ -77,5 +87,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     memoryUrl: (env.MEMORY_URL || "http://host.docker.internal:9501").replace(/\/+$/, ""),
     memoryToken: env.MEMORY_AGENT_TOKEN || undefined,
     memoryStore: env.ANALYST_MEMORY_STORE || "squashtm",
+    reuseHours: nonNegative(env, "ANALYST_REUSE_HOURS", 24),
   };
 }

@@ -65,6 +65,7 @@ export function buildApp(config: Config, options: FastifyServerOptions = {}, dep
     analyses: new Analyses({
       queue, runner, repos, memory, services, gitlabUrl: config.gitlabUrl, gitEnv,
       secrets: [config.gitlabToken, config.claudeOauthToken, config.memoryToken, config.analystToken],
+      reuseHours: config.reuseHours,
     }),
     queue,
     progressIntervalMs: deps.progressIntervalMs ?? 30_000,

@@ -219,8 +219,8 @@ The test container (`../test_environment/`) uses the store `squashtm`, through t
 - `hostPorts` allows the memory server's host port in the container's firewall.
 - `files/knowledge/INSTRUCTIONS.md` is the policy (documents, entity schema, source tags, capture and consolidation) expressed with the tools. There is no index document: `memory_list` returns each document's description.
 - On the host, the `gitlab-sync` and `gitlab-publish` skills (`../.claude/skills/`) record in the metadata of an issue report the GitLab issue it was published to or commented on (`gitlab_issue`, `gitlab_link`, `gitlab_note`), with change notes starting with `gitlab:`.
-- The analyst server (`../analyst_server/`) writes its analyses into the same store, with its own copy of the agent token: story and fix briefs under `/analyses/work-items/<iid>/`, investigations of the tester's issue reports under `/analyses/sessions/NNN/issues/MMM/analysis.md` (and `/analyses/jobs/<job>/` for a free description), tagged `analysis`, with change notes starting with `analyst:`.
-- On the host, the `gitlab-post-analysis` skill reads the analyses of GitLab issues stored under `/analyses/<iid>/` (`analysis.md`, and `fix.diff`, a proposed fix).
+- The analyst server (`../analyst_server/`) writes its analyses into the same store, with its own copy of the agent token: story and fix briefs, and investigations of GitLab issues, under `/analyses/work-items/<iid>/`, investigations of the tester's issue reports under `/analyses/sessions/NNN/issues/MMM/analysis.md` (and `/analyses/jobs/<job>/` for a free description), tagged `analysis`, with change notes starting with `analyst:`.
+- On the host, the `gitlab-post-analysis` skill posts an investigation (`/analyses/work-items/<iid>/analysis.md`, or the one of an issue report) on its GitLab issue, and records the note's URL in its metadata (`gitlab_note`).
 
 ## Not done yet
 

@@ -214,6 +214,7 @@ function minutes(ms: number): string {
 export function formatJobLine(job: Job, position: number | undefined, now: number): string {
   const status = job.status === "queued" ? `queued${position ? ` (position ${position})` : ""}`
     : job.status === "running" ? `running for ${minutes(now - (job.startedAt ?? now))}${job.step ? `, last step: ${job.step}` : ""}`
+    : job.outcome?.reused ? `reused: ${job.outcome.reused}`
     : job.status === "done" ? `done in ${minutes((job.endedAt ?? now) - (job.startedAt ?? now))}`
     : `failed: ${job.error}`;
   const result = job.outcome?.resultPath ? ` · result: ${job.outcome.resultPath}` : job.outcome?.warning ? ` · ${job.outcome.warning}` : "";

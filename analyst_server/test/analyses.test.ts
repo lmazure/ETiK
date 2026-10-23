@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import type { Runner, RunRequest, RunResult } from "../src/engine/runner.js";
 import { MemoryClient } from "../src/memory.js";
-import { ANALYST_TOKEN, fakeGitLab, GITLAB_TOKEN, ISSUE_REPORT, json, sourceRepository, testConfig, type FakeGitLab } from "./helpers.js";
+import { ANALYST_TOKEN, fakeGitLab, GITLAB_TOKEN, ISSUE_REPORT, json, sourceRepository, STAGING, testConfig, type FakeGitLab } from "./helpers.js";
 
 const PROJECT = "acme/core/app";
 
@@ -157,6 +157,70 @@ describe("analysis tools", () => {
   });
 });
 
+describe("investigation of a GitLab work item", () => {
+  beforeEach(async () => start());
+
+  it("reads the work item and stores the analysis under it", async () => {
+    const text = (await call("analyst_investigate", { work_item: "#100" })).content[0]!.text;
+    expect(text).toMatch(/· investigation · #100 · done in .* · result: \/analyses\/work-items\/100\/analysis\.md/);
+    expect(runner.requests[0]!.prompt).toContain("Analyse in the code the problem reported in the GitLab work item #100");
+    expect(runner.requests[0]!.prompt).toContain("Your analysis may be posted on that issue for the developers");
+    expect(runner.requests[0]!.prompt).not.toContain("gitlab_search");
+    expect(fake.memory.get("/analyses/work-items/100/analysis.md")!.body!.metadata).toMatchObject({ kind: "investigation", work_item_updated_at: "2026-10-20T08:00:00Z" });
+  });
+
+  it("stores next to the issue report when both are given", async () => {
+    const text = (await call("analyst_investigate", { issue_report: ISSUE_REPORT, work_item: "#100" })).content[0]!.text;
+    expect(text).toContain("result: /analyses/sessions/003/issues/002/analysis.md");
+    expect(runner.requests[0]!.prompt).toContain("<issue_report>");
+    expect(runner.requests[0]!.prompt).toContain("reported in the GitLab work item #100");
+  });
+});
+
+describe("reuse of stored results", () => {
+  beforeEach(async () => start());
+
+  it("returns a recent brief of an unchanged work item at once, and analyses again on refresh", async () => {
+    await call("analyst_fix_brief", { ref: "#100" });
+    const reused = (await call("analyst_fix_brief", { ref: "#100" })).content[0]!.text;
+    expect(reused).toMatch(/^job-[0-9a-f]{8} · fix brief · #100 · reused: analysed 1 min ago, the work item has not changed since \(refresh: true to analyse again\) · result: \/analyses\/work-items\/100\/fix-brief\.md/);
+    expect(reused).toContain("The fix looks right.");
+    expect(runner.requests).toHaveLength(1);
+    expect((await call("analyst_job", {})).content[0]!.text).toContain("reused: analysed");
+
+    await call("analyst_fix_brief", { ref: "#100", refresh: true });
+    expect(runner.requests).toHaveLength(2);
+  });
+
+  it("analyses again when the work item changed or the result is too old", async () => {
+    await call("analyst_story_brief", { ref: "#100" });
+    fake.updatedAt.set(`${STAGING}#100`, "2026-10-23T09:00:00Z");
+    await call("analyst_story_brief", { ref: "#100" });
+    expect(runner.requests).toHaveLength(2);
+
+    fake.now = () => Date.now() - 25 * 3_600_000;
+    await call("analyst_story_brief", { ref: "#100", refresh: true });
+    fake.now = Date.now;
+    await call("analyst_story_brief", { ref: "#100" });
+    expect(runner.requests).toHaveLength(4);
+  });
+
+  it("reuses an investigation while the issue report keeps its version", async () => {
+    await call("analyst_investigate", { issue_report: ISSUE_REPORT });
+    expect(fake.memory.get("/analyses/sessions/003/issues/002/analysis.md")!.body!.metadata).toMatchObject({ source_version: "3" });
+    expect((await call("analyst_investigate", { issue_report: ISSUE_REPORT })).content[0]!.text).toContain("reused: analysed 1 min ago, the issue report has not changed since");
+    fake.memory.get(ISSUE_REPORT)!.version = 4;
+    await call("analyst_investigate", { issue_report: ISSUE_REPORT });
+    expect(runner.requests).toHaveLength(2);
+  });
+
+  it("never reuses an investigation of a description", async () => {
+    await call("analyst_investigate", { description: "The export fails." });
+    await call("analyst_investigate", { description: "The export fails." });
+    expect(runner.requests).toHaveLength(2);
+  });
+});
+
 describe("without the subscription token", () => {
   it("refuses the analyses but keeps the GitLab tools", async () => {
     await start({}, false);
@@ -172,9 +236,9 @@ describe("MemoryClient", () => {
     const memory = new MemoryClient({ url: "http://memory.test", token: "memory-secret", store: "squashtm", fetch: local.fetch });
     const request = { text: "v1", description: "d", tags: ["analysis"], metadata: {}, changeNote: "analyst: x" };
     expect(await memory.write("/analyses/a.md", request)).toEqual({ path: "/analyses/a.md", version: 1, created: true });
-    expect(await memory.write("/analyses/a.md", { ...request, text: "v2" })).toMatchObject({ created: false });
-    expect(await memory.read("/analyses/a.md")).toBe("v2");
+    expect(await memory.write("/analyses/a.md", { ...request, text: "v2", metadata: { kind: "x" } })).toMatchObject({ version: 2, created: false });
+    expect(await memory.lookup("/analyses/a.md")).toMatchObject({ content: "v2", version: 2, metadata: { kind: "x" } });
     expect(local.requests.every((r) => r.authorization === "Bearer memory-secret")).toBe(true);
-    await expect(memory.read("/missing.md")).rejects.toThrow(/Cannot read \/missing\.md: memory server answered 404/);
+    expect(await memory.lookup("/missing.md")).toBeUndefined();
   });
 });

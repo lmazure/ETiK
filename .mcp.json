@@ -17,6 +17,14 @@
         "Authorization": "Bearer ${MEMORY_AGENT_TOKEN:-}",
         "X-Memory-Store": "squashtm"
       }
+    },
+    "analyst": {
+      "type": "http",
+      "url": "${ANALYST_URL:-http://localhost:9502}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ANALYST_TOKEN:-}"
+      },
+      "timeout": 3600000
     }
   }
 }

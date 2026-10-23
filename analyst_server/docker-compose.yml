@@ -19,6 +19,7 @@ services:
       GITLAB_URL: ${GITLAB_URL:-https://gitlab.com}
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
       ANALYST_MODEL: ${ANALYST_MODEL:-opus}
+      ANALYST_REUSE_HOURS: ${ANALYST_REUSE_HOURS:-24}
       MEMORY_URL: ${MEMORY_URL:-http://host.docker.internal:9501}
       MEMORY_AGENT_TOKEN: ${MEMORY_AGENT_TOKEN:-}
     ports:

@@ -16,8 +16,16 @@ import { systemPrompt, taskPrompt } from "./prompts.js";
 import type { Runner } from "./runner.js";
 
 export type AnalysisRequest =
-  | { kind: "story_brief" | "fix_brief"; ref: string }
-  | { kind: "investigation"; issueReport?: string; description?: string };
+  | { kind: "story_brief" | "fix_brief"; ref: string; refresh?: boolean }
+  | { kind: "investigation"; issueReport?: string; workItem?: string; description?: string; refresh?: boolean };
+
+/** What a job analyses: a work item (briefs, investigation of a GitLab issue), an issue report, a description. */
+interface Input {
+  kind: JobKind;
+  ref?: Ref;
+  issueReport?: string;
+  description?: string;
+}
 
 export interface AnalysesOptions {
   queue: JobQueue;
@@ -31,6 +39,9 @@ export interface AnalysesOptions {
   gitEnv: Record<string, string>;
   /** Removed from every result. */
   secrets: (string | undefined)[];
+  /** A stored result younger than this, whose source has not changed, is returned instead of a new analysis; 0: never. */
+  reuseHours: number;
+  now?: () => number;
 }
 
 const ISSUE_REPORT = /^\/sessions\/(\d{3})\/issues\/(\d{3})\/issue\.md$/;
@@ -45,50 +56,107 @@ export function workItemFolder(ref: Ref, defaultProject: string): string {
 export class Analyses {
   constructor(private readonly options: AnalysesOptions) {}
 
-  /** Starts the analysis, or returns the job already doing it. */
-  start(request: AnalysisRequest): Job {
-    const { runner, services } = this.options;
+  /**
+   * Starts the analysis, or returns the job already doing it, or, unless `refresh`, a finished job holding the stored
+   * result when its source has not changed since and it is recent enough.
+   */
+  async start(request: AnalysisRequest): Promise<Job> {
+    const { runner, services, queue } = this.options;
     if (!runner) {
       throw new AnalystError("NOT_CONFIGURED", "The analyses are not available: the analyst server has no CLAUDE_CODE_OAUTH_TOKEN. The GitLab tools still work.");
     }
+    let input: Input;
+    let target: string;
+    let key: string;
     if (request.kind === "investigation") {
       const report = request.issueReport?.trim() || undefined;
+      const workItem = request.workItem?.trim() || undefined;
       const description = request.description?.trim() || undefined;
-      if (!report && !description) throw new AnalystError("INVALID_ARGUMENT", "Give issue_report (the path of an issue report in the memory server) or description, or both.");
+      if (!report && !workItem && !description) {
+        throw new AnalystError("INVALID_ARGUMENT", "Give issue_report (the path of an issue report in the memory server), work_item (a GitLab issue) or description, or several of them.");
+      }
       if (report && !ISSUE_REPORT.test(report)) {
         throw new AnalystError("INVALID_ARGUMENT", `'${report}' is not the path of an issue report, such as /sessions/003/issues/002/issue.md.`);
       }
       if (report && !this.options.memory) {
         throw new AnalystError("NOT_CONFIGURED", "The analyst server has no MEMORY_AGENT_TOKEN, so it cannot read issue reports: pass the problem as description instead.");
       }
-      const key = `investigation:${report ?? createHash("sha256").update(description!).digest("hex").slice(0, 16)}`;
-      return this.options.queue.submit("investigation", report ?? `"${description!.slice(0, 60)}${description!.length > 60 ? "…" : ""}"`, key,
-        (job, signal) => this.execute(job, signal, { kind: "investigation", issueReport: report, description }));
+      const ref = workItem ? parseRef(workItem, "work_item", services.refs) : undefined;
+      input = { kind: "investigation", ref, issueReport: report, description };
+      target = report ?? (ref ? formatRef(ref, services.refs.defaultProject) : `"${description!.slice(0, 60)}${description!.length > 60 ? "…" : ""}"`);
+      key = `investigation:${report ?? (ref ? `${ref.path}#${ref.iid}` : createHash("sha256").update(description!).digest("hex").slice(0, 16))}`;
+    } else {
+      const ref = parseRef(request.ref, "work_item", services.refs);
+      input = { kind: request.kind, ref };
+      target = formatRef(ref, services.refs.defaultProject);
+      key = `${request.kind}:${ref.path}#${ref.iid}`;
     }
-    const ref = parseRef(request.ref, "work_item", services.refs);
-    const target = formatRef(ref, services.refs.defaultProject);
-    return this.options.queue.submit(request.kind, target, `${request.kind}:${ref.path}#${ref.iid}`,
-      (job, signal) => this.execute(job, signal, { kind: request.kind, ref }));
+    const active = queue.active(key);
+    if (active) return active;
+    if (!request.refresh) {
+      const reused = await this.reusable(input);
+      if (reused) return queue.completed(input.kind, target, key, reused);
+    }
+    return queue.submit(input.kind, target, key, (job, signal) => this.execute(job, signal, input));
   }
 
-  private resultPath(job: Job, input: { kind: JobKind; ref?: Ref; issueReport?: string }): string {
-    if (input.ref) return `${workItemFolder(input.ref, this.options.services.refs.defaultProject)}/${FILE_NAMES[input.kind]}`;
+  /** The stored result, when its source is unchanged and it is younger than the reuse window; else undefined. */
+  private async reusable(input: Input): Promise<JobOutcome | undefined> {
+    const { memory, services, reuseHours } = this.options;
+    if (!memory || reuseHours <= 0 || (!input.ref && !input.issueReport)) return undefined;
+    const path = this.resultPath(undefined, input);
+    const stored = await memory.lookup(path).catch(() => undefined);
+    if (!stored) return undefined;
+    const age = (this.options.now ?? Date.now)() - Date.parse(stored.updated_at);
+    if (!(age >= 0 && age < reuseHours * 3_600_000)) return undefined;
+    let unchanged: string;
+    if (input.issueReport) {
+      const report = await memory.lookup(input.issueReport).catch(() => undefined);
+      if (!report || stored.metadata.source_version !== String(report.version)) return undefined;
+      unchanged = "the issue report has not changed since";
+    } else {
+      const updatedAt = await services.workItems.updatedAt(input.ref!).catch(() => undefined);
+      if (!updatedAt || stored.metadata.work_item_updated_at !== updatedAt) return undefined;
+      unchanged = "the work item has not changed since";
+    }
+    const hours = age / 3_600_000;
+    const when = hours < 1 ? `${Math.max(1, Math.round(hours * 60))} min ago` : `${Math.round(hours)} h ago`;
+    return {
+      text: stored.content,
+      resultPath: path,
+      commits: (stored.metadata.commits ?? "").split(", ").filter((c) => c !== ""),
+      warning: undefined,
+      reused: `analysed ${when}, ${unchanged} (refresh: true to analyse again)`,
+    };
+  }
+
+  /** Next to the issue report, else under the work item, else under the job (a description). */
+  private resultPath(job: Job | undefined, input: Input): string {
     const match = input.issueReport ? ISSUE_REPORT.exec(input.issueReport) : null;
     if (match) return `/analyses/sessions/${match[1]}/issues/${match[2]}/analysis.md`;
-    return `/analyses/jobs/${job.id}/analysis.md`;
+    if (input.ref) return `${workItemFolder(input.ref, this.options.services.refs.defaultProject)}/${FILE_NAMES[input.kind]}`;
+    return `/analyses/jobs/${job!.id}/analysis.md`;
   }
 
-  private async execute(job: Job, signal: AbortSignal, input: { kind: JobKind; ref?: Ref; issueReport?: string; description?: string }): Promise<JobOutcome> {
+  private async execute(job: Job, signal: AbortSignal, input: Input): Promise<JobOutcome> {
     const { runner, repos, memory, services } = this.options;
     const checkouts = new Map<string, Checkout>();
     const jobDir = repos.jobDir(job.id);
     try {
       await mkdir(jobDir, { recursive: true });
-      const issueReport = input.issueReport && memory ? { path: input.issueReport, content: await memory.read(input.issueReport) } : undefined;
+      // What the reuse of the result is checked against: the version of the report, the update time of the work item.
+      const report = input.issueReport && memory ? await memory.lookup(input.issueReport) : undefined;
+      if (input.issueReport && !report) throw new AnalystError("NOT_FOUND", `No issue report at ${input.issueReport} in the memory server.`);
+      const workItemUpdatedAt = input.ref ? await services.workItems.updatedAt(input.ref) : undefined;
       const reference = input.ref ? formatRef(input.ref, services.refs.defaultProject) : undefined;
       const result = await runner!.run({
         systemPrompt: systemPrompt(this.options.gitlabUrl),
-        prompt: taskPrompt({ kind: input.kind, reference, issueReport, description: input.description }),
+        prompt: taskPrompt({
+          kind: input.kind,
+          reference,
+          issueReport: report ? { path: input.issueReport!, content: report.content } : undefined,
+          description: input.description,
+        }),
         jobDir,
         tools: agentTools({ jobId: job.id, services, repos, gitEnv: this.options.gitEnv, gitlabUrl: this.options.gitlabUrl, checkouts }),
         signal,
@@ -114,7 +182,11 @@ export class Analyses {
             text,
             description: `${TITLES[input.kind]} of ${job.target}`,
             tags: ["analysis", input.kind.replace("_", "-")],
-            metadata: { kind: input.kind, job_id: job.id, target: job.target, commits: commits.join(", "), model: runner!.model },
+            metadata: {
+              kind: input.kind, job_id: job.id, target: job.target, commits: commits.join(", "), model: runner!.model,
+              ...(workItemUpdatedAt ? { work_item_updated_at: workItemUpdatedAt } : {}),
+              ...(report ? { source_version: String(report.version) } : {}),
+            },
             changeNote: `analyst: ${input.kind.replace("_", " ")} of ${job.target} (job ${job.id})`,
           });
         } catch (error) {

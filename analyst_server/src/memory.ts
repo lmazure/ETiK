@@ -18,6 +18,13 @@ export interface WriteRequest {
   changeNote: string;
 }
 
+export interface StoredDoc {
+  content: string;
+  version: number;
+  metadata: Record<string, string>;
+  updated_at: string;
+}
+
 export interface WriteResult {
   path: string;
   version: number;
@@ -58,11 +65,13 @@ export class MemoryClient {
     return new AnalystError(response.status === 404 ? "NOT_FOUND" : "MEMORY_ERROR", `${what}: memory server answered ${response.status}${detail ? ` (${detail})` : ""}.`);
   }
 
-  /** The content of a text document. */
-  async read(path: string): Promise<string> {
+  /** A text document with its version, metadata and last update; undefined when it does not exist. */
+  async lookup(path: string): Promise<StoredDoc | undefined> {
     const response = await this.send(path, { method: "GET" });
+    if (response.status === 404) return undefined;
     if (!response.ok) throw await this.failure(response, `Cannot read ${path}`);
-    return ((await response.json()) as { content: string }).content;
+    const doc = (await response.json()) as Partial<StoredDoc>;
+    return { content: doc.content ?? "", version: doc.version ?? 0, metadata: doc.metadata ?? {}, updated_at: doc.updated_at ?? "" };
   }
 
   /** Overwrites the document, or creates it when it does not exist yet. */
