@@ -21,6 +21,15 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     searchGroup: GROUP,
     gitlabTimeoutMs: 1_000,
     mcpMaxOutputChars: 20_000,
+    claudeOauthToken: undefined,
+    model: "test-model",
+    maxJobs: 1,
+    jobTimeoutMs: 60_000,
+    repoGroups: ["henixdevelopment/squash/squash-tm"],
+    reposDir: "/nonexistent",
+    memoryUrl: "http://memory.test",
+    memoryToken: "memory-secret",
+    memoryStore: "squashtm",
     ...overrides,
   };
 }
@@ -143,6 +152,25 @@ export interface FakeGitLab {
   requests: FakeRequest[];
   /** Responses to serve first, before the routes: e.g. errors. */
   queue: Response[];
+  /** Documents of the fake memory server (http://memory.test), by path. */
+  memory: Map<string, { content: string; body?: Record<string, unknown> }>;
+}
+
+export const ISSUE_REPORT = "/sessions/003/issues/002/issue.md";
+
+/** The fake memory server: GET and PUT of /api/stores/squashtm/docs/<path>, with its create/overwrite rules. */
+function memoryServer(fake: FakeGitLab, url: URL, method: string, headers: Headers, body: string | undefined): Response {
+  const prefix = "/api/stores/squashtm/docs";
+  if (!url.pathname.startsWith(prefix)) return json({ error: { message: "not found" } }, 404);
+  const path = decodeURIComponent(url.pathname.slice(prefix.length));
+  const existing = fake.memory.get(path);
+  if (method === "GET") return existing ? json({ path, content: existing.content }) : json({ error: { message: `${path} not found` } }, 404);
+  const parsed = JSON.parse(body ?? "{}") as Record<string, unknown>;
+  const create = headers.get("if-none-match") === "*";
+  if (create && existing) return json({ error: { message: "exists" } }, 409);
+  if (!create && !existing) return json({ error: { message: "not found" } }, 404);
+  fake.memory.set(path, { content: String(parsed.file_text), body: parsed });
+  return json({ path, version: 1, created: create }, create ? 201 : 200);
 }
 
 export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
@@ -180,9 +208,14 @@ export function fakeGitLab(): FakeGitLab {
   const fake: FakeGitLab = {
     requests: [],
     queue: [],
+    memory: new Map([[ISSUE_REPORT, { content: "# [Export] The export fails\n\n## Steps to Reproduce\n\n1. Click Export." }]]),
     fetch: (async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : input);
       const headers = new Headers(init?.headers);
+      if (url.origin === "http://memory.test") {
+        fake.requests.push({ method: init?.method ?? "GET", url, authorization: headers.get("authorization") ?? undefined, operation: undefined, variables: undefined });
+        return memoryServer(fake, url, init?.method ?? "GET", headers, typeof init?.body === "string" ? init.body : undefined);
+      }
       const body = typeof init?.body === "string" ? (JSON.parse(init.body) as { query: string; variables: Record<string, unknown> }) : undefined;
       const operation = body ? /query\s+(\w+)/.exec(body.query)?.[1] : undefined;
       fake.requests.push({ method: init?.method ?? "GET", url, authorization: headers.get("authorization") ?? undefined, operation, variables: body?.variables });
@@ -193,4 +226,23 @@ export function fakeGitLab(): FakeGitLab {
     }) as typeof fetch,
   };
   return fake;
+}
+
+/** A local git repository with a `main` branch and one commit; `commit()` adds another. */
+export async function sourceRepository(dir: string): Promise<{ path: string; commit: (file: string, content: string) => Promise<string> }> {
+  const { runGit } = await import("../src/repos/git.js");
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  await mkdir(dir, { recursive: true });
+  const env = { GIT_AUTHOR_NAME: "dev", GIT_AUTHOR_EMAIL: "dev@example.org", GIT_COMMITTER_NAME: "dev", GIT_COMMITTER_EMAIL: "dev@example.org" };
+  await runGit(["init", "--quiet", "--initial-branch=main"], { cwd: dir, env });
+  const commit = async (file: string, content: string) => {
+    await mkdir(join(dir, file, ".."), { recursive: true });
+    await writeFile(join(dir, file), content);
+    await runGit(["add", "--all"], { cwd: dir, env });
+    await runGit(["commit", "--quiet", "-m", `Change ${file}`], { cwd: dir, env });
+    return (await runGit(["rev-parse", "HEAD"], { cwd: dir, env })).trim();
+  };
+  await commit("src/Export.java", "class Export {\n  void run() {\n    check();\n  }\n}\n");
+  return { path: dir, commit };
 }

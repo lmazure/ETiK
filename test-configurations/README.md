@@ -15,6 +15,7 @@ Exploratory testing of SquashTM: Claude Code tests SquashTM's UI, with Playwrigh
 /sessions/NNN/log/<screenshot>.png
 /sessions/NNN/issues/MMM/issue.md     one folder per issue (001, 002…)
 /sessions/NNN/issues/MMM/<screenshot>.png
+/analyses/…                           written by the analyst server, not by the tester (see below)
 ```
 
 Markdown documents are written with the `memory_*` tools, each with a document tag naming its kind: `entity` or `cross-cutting` for the knowledge base, `charter`, `checklist`, `log` or `issue` for a Session; screenshots and videos have none. Screenshots are taken into the workspace's `tmp/` folder, then uploaded with the `memory-upload` skill (`squashtm/skills/memory-upload/`), which sends the file to the memory server's REST API with `MEMORY_URL` and `MEMORY_AGENT_TOKEN`: the image never goes through the conversation. The workspace only holds temporary files.
@@ -25,7 +26,9 @@ Prerequisites, on the host:
 - SquashTM listening on port 8090, e.g. started with Docker Compose as described in the [SquashTM Docker quick start](https://tm-en.doc.squashtest.com/latest/install-guide/installation/install-squash/docker-install.html#quick-start), with its port published on 8090.
 - The memory server listening on port 9501 (see [`../memory_server/README.md`](../memory_server/README.md)), with an agent token for the store `squashtm` (`MEMORY_AGENT_TOKENS=squashtm=…` in `../memory_server/.env`).
 - That token as `MEMORY_AGENT_TOKEN` in `../test_environment/memory.env`.
-- The analyst server listening on port 9502 (see [`../analyst_server/README.md`](../analyst_server/README.md)), and its `ANALYST_TOKEN` in `../test_environment/analyst.env`. It serves the `gitlab_*` tools, which read GitLab work items, merge requests and search, read-only: the agent uses them for Charters about a user story or a bug fix, and to look for an existing issue before writing an issue report.
+- The analyst server listening on port 9502 (see [`../analyst_server/README.md`](../analyst_server/README.md)), and its `ANALYST_TOKEN` in `../test_environment/analyst.env`. It serves:
+  - the `gitlab_*` tools, which read GitLab work items, merge requests and search, read-only: the agent uses them for Charters about a user story or a bug fix, and to look for an existing issue before writing an issue report;
+  - the `analyst_*` tools, analyses by another Claude reading the SquashTM code: a story brief or a fix brief at the start of a Charter about a work item, and an investigation of each issue report. They run in the background; `squashtm/files/.claude/settings.json` makes Claude Code move such a call to the background after 10 s (instead of 120 s), and the result reaches the agent as a notification. The analyst stores them in the memory store `squashtm`, under `/analyses/work-items/<iid>/`, `/analyses/sessions/NNN/issues/MMM/analysis.md` and `/analyses/jobs/<job>/`.
 
 The store is set in `squashtm/config.json` (the `X-Memory-Store` header of the `memory` MCP server and the `memory agent token` check); the knowledge base instructions copied into the workspace (`squashtm/files/knowledge/INSTRUCTIONS.md`) and the `memory-upload` script name it too.
 

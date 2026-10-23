@@ -4,10 +4,29 @@ services:
     container_name: analyst-server
     build: .
     image: analyst-server:latest
+    # tini reaps the processes of the firewall refresh loop and of the agent.
+    init: true
+    # NET_ADMIN / NET_RAW let the entry point apply the egress firewall (firewall.sh); the server itself runs without them.
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    # The memory server, on a host port.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       ANALYST_TOKEN: ${ANALYST_TOKEN:?set ANALYST_TOKEN in .env}
       GITLAB_READ_TOKEN: ${GITLAB_READ_TOKEN:?set GITLAB_READ_TOKEN in .env}
       GITLAB_URL: ${GITLAB_URL:-https://gitlab.com}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      ANALYST_MODEL: ${ANALYST_MODEL:-opus}
+      MEMORY_URL: ${MEMORY_URL:-http://host.docker.internal:9501}
+      MEMORY_AGENT_TOKEN: ${MEMORY_AGENT_TOKEN:-}
     ports:
       - "${ANALYST_PORT:-9502}:9502"
+    volumes:
+      # Clones of the code projects and the worktrees of the running analyses.
+      - repos:/repos
     restart: unless-stopped
+
+volumes:
+  repos:

@@ -22,6 +22,9 @@ try {
   process.exit(1);
 }
 
+if (!config.claudeOauthToken) console.warn("CLAUDE_CODE_OAUTH_TOKEN is not set: the analyses are disabled, only the GitLab tools work");
+if (!config.memoryToken) console.warn("MEMORY_AGENT_TOKEN is not set: the analyses are not stored, and issue reports cannot be read");
+
 const app = buildApp(config, { logger: { level: process.env.LOG_LEVEL ?? "info" } });
 
 const shutdown = async (signal: string) => {

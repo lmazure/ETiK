@@ -51,10 +51,12 @@ describe("HTTP endpoints", () => {
 });
 
 describe("MCP server", () => {
-  it("lists the three read-only tools", async () => {
+  it("lists the GitLab and analysis tools, all read-only", async () => {
     const client = await connect();
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["gitlab_merge_request", "gitlab_search", "gitlab_work_item"]);
+    expect(tools.map((t) => t.name).sort()).toEqual([
+      "analyst_fix_brief", "analyst_investigate", "analyst_job", "analyst_story_brief", "gitlab_merge_request", "gitlab_search", "gitlab_work_item",
+    ]);
     expect(tools.every((t) => t.annotations?.readOnlyHint === true)).toBe(true);
     expect(tools.find((t) => t.name === "gitlab_work_item")!.inputSchema.required).toEqual(["ref"]);
     await client.close();

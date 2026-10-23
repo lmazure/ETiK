@@ -2,6 +2,7 @@
  * Text results for the model: one line per item, sections in Markdown, explicit truncation, actionable errors.
  * See the "Tools" section of the README.
  */
+import type { Job } from "../engine/jobs.js";
 import { AnalystError } from "../errors.js";
 import type { FileChange, MergeRequest } from "../gitlab/merge-requests.js";
 import { formatRef, type Ref } from "../gitlab/refs.js";
@@ -202,6 +203,36 @@ export class Formatter {
     if (hits.length === 0) out.push("(no match; try other words, or state 'all')");
     return out.join("\n");
   }
+}
+
+function minutes(ms: number): string {
+  const m = Math.round(ms / 60_000);
+  return m < 1 ? "less than a minute" : `${m} min`;
+}
+
+/** One line per job: id, kind, target, status, and the memory path of its result. */
+export function formatJobLine(job: Job, position: number | undefined, now: number): string {
+  const status = job.status === "queued" ? `queued${position ? ` (position ${position})` : ""}`
+    : job.status === "running" ? `running for ${minutes(now - (job.startedAt ?? now))}${job.step ? `, last step: ${job.step}` : ""}`
+    : job.status === "done" ? `done in ${minutes((job.endedAt ?? now) - (job.startedAt ?? now))}`
+    : `failed: ${job.error}`;
+  const result = job.outcome?.resultPath ? ` · result: ${job.outcome.resultPath}` : job.outcome?.warning ? ` · ${job.outcome.warning}` : "";
+  return `${job.id} · ${job.kind.replace("_", " ")} · ${job.target} · ${status}${result}`;
+}
+
+/** A finished job: its status line, then its result. */
+export function formatJob(job: Job, now: number): string {
+  const out = [formatJobLine(job, undefined, now)];
+  if (job.outcome) {
+    if (job.outcome.warning) out.push(`Warning: ${job.outcome.warning}.`);
+    out.push("", job.outcome.text.trim());
+  }
+  return out.join("\n");
+}
+
+export function formatJobs(jobs: { job: Job; position: number | undefined }[], now: number): string {
+  if (jobs.length === 0) return "No analysis job since the analyst server started (jobs are kept for a day).";
+  return ["Analysis jobs, newest first:", ...jobs.map(({ job, position }) => formatJobLine(job, position, now))].join("\n");
 }
 
 export function formatError(error: unknown): string {

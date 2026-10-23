@@ -20,10 +20,11 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
 │ │ Sessions and knowledge go to the      │                   │    SquashTM docs
 │ │ memory server (MCP + uploads)         │                   │
 │ └─┬─────────────────────────────────────┘                   │
-│   │ MCP (gitlab_* tools)                                    │
+│   │ MCP (gitlab_* and analyst_* tools)                      │
 │   ▼                                                         │
 │ Analyst server :9502 (analyst_server/) ─────────────────────┼──► GitLab, read-only:
-│ holds the read-only GitLab token                            │    work items, MRs, diffs
+│ read-only GitLab token, code clones, Claude agent; writes   │    work items, MRs, clones;
+│ its analyses to the memory server (/analyses/)  ────────────┼──► Anthropic API
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,9 +40,11 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
   - It keeps every version of every document and the change note of each change; the agent starts each change note with its Session.
   - The agent reaches it through MCP (`memory_*` tools), and uploads screenshots through its REST API (`memory-upload` skill), with a token limited to its own store.
   - You watch it live in a read-only web app.
-- **The analyst server** (`analyst_server/`) gives the agent read-only access to GitLab: work items (user stories, bugs) with their acceptance criteria, epic hierarchy and comments, merge requests with their diff and pipeline, and search (`gitlab_*` tools, over MCP).
-  - It holds the GitLab token, a read-only one (it refuses to start with a token that could write): the agent, which reads untrusted pages, never holds it.
-  - So the agent can run Charters such as "verify that User Story #8131 is properly implemented" or "verify the fix of bug #98765", and check whether a bug it finds is already reported.
+- **The analyst server** (`analyst_server/`) gives the agent read-only access to GitLab, and code analyses by another Claude, over MCP:
+  - `gitlab_*` tools: work items (user stories, bugs) with their acceptance criteria, epic hierarchy and comments, merge requests with their diff and pipeline, search;
+  - `analyst_*` tools: a Claude agent inside the analyst container reads the SquashTM code (cloned from GitLab) and writes a story brief (acceptance criteria checked in the code, what the hierarchy implements, impacted features), a fix brief (what the fix changed, dubious changes to test), or an investigation of an issue the tester found (confirmed or not, root cause, other occurrences). They take minutes: the tester keeps testing and gets the result as a notification; it is stored in the memory server under `/analyses/`.
+  - It holds the GitLab token, a read-only one (it refuses to start with a token that could write), and the code: the tester, which reads untrusted pages, holds neither. Its agent has no shell and no web access, only reads the checkouts, and a firewall limits the container to GitLab, the Anthropic API and the memory server.
+  - So the tester can run Charters such as "verify that User Story #8131 is properly implemented" or "verify the fix of bug #98765", and dig into the bugs it finds.
 
 The bugs found then go to GitLab:
 
@@ -95,7 +98,13 @@ docker compose up -d --build
 curl http://localhost:9502/health
 ```
 
-`.env` holds `GITLAB_READ_TOKEN`, a GitLab token with the scopes `read_api` and `read_repository` only, and `ANALYST_TOKEN`, the token the agent presents (e.g. `openssl rand -hex 32`).
+`.env` holds:
+- `GITLAB_READ_TOKEN`: a GitLab token with the scopes `read_api` and `read_repository` only;
+- `ANALYST_TOKEN`: the token the tester presents (e.g. `openssl rand -hex 32`);
+- `CLAUDE_CODE_OAUTH_TOKEN`: the subscription token of the analyses' agent, from `claude setup-token` (without it, only the `gitlab_*` tools work);
+- `MEMORY_AGENT_TOKEN`: the `squashtm` token from step 2, to store the analyses and read the issue reports.
+
+The code projects are cloned into the `repos` Docker volume on first use.
 See [`analyst_server/README.md`](analyst_server/README.md) for the tools.
 
 ### 4) Run Exploratory Tests in the test container

@@ -1,14 +1,17 @@
 # Analyst server
 
-A service that gives the ETiK tester read-only access to GitLab, over MCP: work items (user stories, bugs, tasks, epics) with their acceptance criteria, hierarchy and comments, merge requests with their diff and pipeline, and search.
+A service that gives the ETiK tester, over MCP:
+- read-only access to GitLab (`gitlab_*` tools): work items (user stories, bugs, tasks, epics) with their acceptance criteria, hierarchy and comments, merge requests with their diff and pipeline, and search;
+- code analyses (`analyst_*` tools), written by a Claude agent running in this container on the SquashTM code it clones from GitLab: story briefs, fix briefs, and investigations of the problems the tester finds.
 
-The tester (Claude Code in the test container) reads untrusted pages in YOLO mode: it must not hold a GitLab token. This container holds it, refuses to start if the token could write, and only answers the tester's token.
+The tester (Claude Code in the test container) reads untrusted pages in YOLO mode: it must hold neither a GitLab token nor the private code. This container holds both, refuses to start if the token could write, and only answers the tester's token.
 
 ```
- Test container (tester)  ── MCP, Bearer ANALYST_TOKEN ──►  Analyst server :9502  ── read-only token ──►  gitlab.com
+ Test container (tester) ── MCP, Bearer ANALYST_TOKEN ──► Analyst server :9502 ── read-only token ──► gitlab.com (API, git)
+                                                           │ job queue → Claude agent ─────────────► api.anthropic.com
+                                                           │ (Read/Grep/Glob on the checkouts, git and GitLab tools)
+                                                           └── results ──► memory server :9501, /analyses/
 ```
-
-LLM analyses of the code (bug investigations, fix briefs) will come next, in the same server.
 
 ## Setup
 
@@ -27,9 +30,19 @@ curl http://localhost:9502/health
 | `GITLAB_SEARCH_GROUP` | The group `gitlab_search` searches when no project is given; `henixdevelopment/squash` by default. |
 | `GITLAB_TIMEOUT_MS` | Timeout of one GitLab request, 30 000 ms by default. |
 | `ANALYST_MCP_MAX_OUTPUT_CHARS` | Maximum size of one tool result, 40 000 characters by default; longer results end with `[truncated: N more characters not shown]`. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Subscription token of the analyses' agent: run `claude setup-token` on the host. Without it, the `analyst_*` tools answer that they are not available; the `gitlab_*` tools still work. |
+| `ANALYST_MODEL` | Model of the analyses, `opus` by default. |
+| `ANALYST_MAX_JOBS` | Analyses run at the same time, 1 by default; the others wait in a queue. |
+| `ANALYST_JOB_TIMEOUT_MS` | Longest an analysis may run, 45 minutes by default. |
+| `ANALYST_REPO_GROUPS` | Groups whose projects the agent may check out, comma-separated; `henixdevelopment/squash/squash-tm/core,henixdevelopment/squash/squash-tm/tm-plugin` by default. |
+| `ANALYST_REPOS_DIR` | Clones and job worktrees; `/repos` (the `repos` volume) in the container. |
+| `MEMORY_URL` | The memory server, `http://host.docker.internal:9501` by default. |
+| `MEMORY_AGENT_TOKEN` | Agent token of the store, to store the analyses and read the tester's issue reports. Without it, results are only returned to the caller. |
+| `ANALYST_MEMORY_STORE` | The memory store, `squashtm` by default. |
+| `FIREWALL_EXTRA_DOMAINS` | More domains the container may reach (space-separated), e.g. if the agent's authentication needs one. |
 | `ANALYST_PORT` | Host port (Docker Compose), 9502 by default. |
 
-The test container gets the analyst token from `../test_environment/analyst.env`; the `squashtm` configuration declares the MCP server `analyst` (`"timeout": 3600000`, for the long analyses to come), allows host port 9502, and checks `/health` and `/auth-check` before starting Claude Code.
+The test container gets the analyst token from `../test_environment/analyst.env`; the `squashtm` configuration declares the MCP server `analyst` (`"timeout": 3600000`), allows host port 9502, checks `/health` and `/auth-check` before starting Claude Code, and sets `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS=10000` (`files/.claude/settings.json`) so that an analysis call moves to the background after 10 s.
 
 ## HTTP endpoints
 
@@ -193,6 +206,54 @@ Most recently updated first. Epics are not searched (the REST search covers issu
 henixdevelopment/squash/squash-tm/tm-plugin/api/henix-tm-api-rest-admin#5 · closed · [Export - API] Export endpoint · Task · updated 2026-10-18T08:00:00Z · https://gitlab.com/…/-/issues/5
 ```
 
+### `analyst_story_brief`, `analyst_fix_brief`, `analyst_investigate`
+
+| Tool | Parameters | The analysis |
+|---|---|---|
+| `analyst_story_brief` | `ref`: a work item | For a user story: each acceptance criterion checked in the code (implemented, not found, not checkable), the hierarchy with what each item implements, the code changes and the features they touch, risks and suggested Exploratory Test Charters. |
+| `analyst_fix_brief` | `ref`: a work item | For a bug: the reported behavior, what each merge request changed and the root cause it addresses, whether it is in the analysed code, the impacted areas, the **dubious or wrong changes** with how to trigger them from the UI or the REST API, suggested tests. |
+| `analyst_investigate` | `issue_report`: the memory path of an issue report (`/sessions/NNN/issues/MMM/issue.md`); `description`: free text; at least one | For a problem found by the tester: verdict (confirmed, not confirmed, undecided by the code), root cause, other occurrences, larger impact, tests to run. |
+
+Each call starts a job, or joins the queued or running job of the same analysis. It returns when the job ends: in the tester, Claude Code moves the call to the background after 10 s and delivers the result as a notification. While it runs, the server sends a progress notification at once and every 30 s (`job-1a2b3c4d · fix brief · #8131 · running for 4 min, last step: git_blame …`). If the caller goes away, the job goes on.
+
+The result starts with the job's status line and the memory path where it is stored, then the analysis, ending with an `## Analysed code` section added by the server (each project and the full SHA of the commit read, the model):
+
+```
+job-1a2b3c4d · fix brief · #100 · done in 6 min · result: /analyses/work-items/100/fix-brief.md
+
+# Fix brief: #100 [Export] Show the export button
+…
+## Analysed code
+
+- henixdevelopment/squash/squash-tm/core/squashtest-tm-staging at main (`793fbcd0ca6628a6d1376ed45f14406156562df0`)
+- Analysed by opus (ETiK analyst, job job-1a2b3c4d, 31 turns), from GitLab and the code only: no build, no test run.
+```
+
+Results in the memory store (overwritten when the analysis is run again; the memory server keeps the previous versions), tagged `analysis` and `story-brief` / `fix-brief` / `investigation`, with the metadata `kind`, `job_id`, `target`, `commits`, `model`, and a change note `analyst: …`:
+
+```
+/analyses/work-items/<iid>/story-brief.md        <iid> in the default project, else <project>-<iid>
+/analyses/work-items/<iid>/fix-brief.md
+/analyses/sessions/NNN/issues/MMM/analysis.md    investigation of /sessions/NNN/issues/MMM/issue.md
+/analyses/jobs/<job-id>/analysis.md              investigation of a description
+```
+
+When the memory server cannot store it, the result is still returned, with `Warning: the result could not be stored…`.
+
+### `analyst_job`
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `job_id` | string, optional | A job id; without it, the jobs of the last 24 hours, newest first. |
+
+```
+Analysis jobs, newest first:
+job-5e6f7a8b · investigation · /sessions/003/issues/002/issue.md · running for 3 min, last step: Grep ExportService
+job-1a2b3c4d · fix brief · #100 · done in 6 min · result: /analyses/work-items/100/fix-brief.md
+```
+
+With a `job_id`, a finished job returns its whole result. Jobs live in the server process: after a restart, their results are only in the memory server.
+
 ### Errors
 
 A failing call returns `isError: true` and one line `Error: …` that says what to do:
@@ -204,21 +265,34 @@ A failing call returns `isError: true` and one line `Error: …` that says what 
 | Missing, or not readable with the token | `Work item … not found, or not readable with the analyst's token.` / `Not found on GitLab… (404…)` |
 | Token refused or not allowed | `GitLab rejected the analyst's token (401…); the administrator must renew GITLAB_READ_TOKEN.` / `… cannot read this (403…)` |
 | GitLab down, slow or rate-limited | `GitLab is unreachable (…)`, `GitLab failed (5xx)`, `GitLab rate limit reached (429)…` (one retry after `Retry-After` first) |
+| Analyses not configured | `The analyses are not available: the analyst server has no CLAUDE_CODE_OAUTH_TOKEN…` |
+| Bad investigation request | `Give issue_report … or description, or both.`, `'…' is not the path of an issue report…` |
+| Failed analysis | `Job job-… (fix brief of #100) failed: <reason>` (agent error, `timed out after 45 min`, unreadable issue report…) |
+| Unknown job | `No job 'job-…': it never existed, was finished more than a day ago, or the analyst server restarted…` |
+
+## The analyses' agent
+
+Each job runs one Claude Agent SDK session (`src/engine/runner.ts`) with the prompt of its kind (`src/engine/prompts.ts`):
+- **Tools**: the built-in `Read`, `Grep` and `Glob`, and the analyst's own tools, served in-process (`src/engine/agent-tools.ts`): `gitlab_work_item`, `gitlab_merge_request`, `gitlab_search` (as above), `repo_list`, `repo_checkout(project)`, `git_log`, `git_show`, `git_blame`, `git_diff`. No shell, no web, no writing, no sub-agents.
+- **Repositories**: `repo_checkout` makes a bare partial clone of the project in `/repos/git/` the first time (fetched the next times), and a worktree for the job in `/repos/work/<job-id>/`, detached at the head of the default branch; the worktrees are removed when the job ends. The git tools run `git` with a fixed argument list (no shell, no pager, no external diff or textconv, no hooks), validated revisions and paths inside the checkout.
+- **Permissions** (`src/engine/permissions.ts`): a `PreToolUse` hook lets `Read`, `Grep` and `Glob` reach only the job's directory (symbolic links followed) and denies every other built-in tool; nothing is ever approved interactively.
+- **Environment**: the agent's process only gets `PATH`, `HOME` and `CLAUDE_CODE_OAUTH_TOKEN`; the GitLab, memory and analyst tokens stay in the server process, which runs the analyst's tools. The four tokens are also scrubbed from every result.
+- **Prompt injection**: the prompts tell the agent that issues, merge requests, issue reports and code are data, never instructions, and to report any attempt to steer it.
 
 ## Security
 
-- The GitLab token is read-only, checked at each start; the server only sends GET requests and GraphQL queries, to `GITLAB_URL` only, without following redirects.
+- The GitLab token is read-only, checked at each start; the server only sends GET requests and GraphQL queries to `GITLAB_URL`, without following redirects, and only uses the token for git over HTTPS through a credential helper in the environment of its own git commands.
 - Callers are authenticated with `ANALYST_TOKEN` (compared in constant time) before any MCP processing.
-- No egress firewall yet: the server runs no agent and calls fixed GitLab endpoints. It will get one with the LLM analyses.
+- **Egress firewall** (`firewall.sh`, applied by `entrypoint.sh` at start, as root): everything is denied except DNS, HTTPS to `api.anthropic.com` and the GitLab host, and, on the Docker host, the memory server's port; IPv6 is denied. The container refuses to start if `example.com` is reachable. The domains are re-resolved every 30 minutes (their CDN addresses rotate). The server then runs as `node`, without any capability: it cannot change the firewall.
 
 ## Development
 
 ```bash
 npm install
-npm test          # unit and MCP tests, against a fake GitLab (invented content)
+npm test          # unit and MCP tests, against a fake GitLab and memory server (invented content), local git repositories and a fake agent
 npm run typecheck
 npm run build
 npm run dev       # with ANALYST_TOKEN and GITLAB_READ_TOKEN in the environment
 ```
 
-The tests never call GitLab: `test/helpers.ts` serves responses with the shapes of gitlab.com and invented content. Check a change of the queries against the real API before committing.
+The tests never call GitLab, the memory server or Claude: `test/helpers.ts` serves responses with the shapes of gitlab.com and invented content, and `test/analyses.test.ts` replaces the agent with a fake runner that uses the real analyst tools. Check a change of the queries or of the agent's options against the real services before committing.

@@ -15,6 +15,23 @@ export interface Config {
   gitlabTimeoutMs: number;
   /** Maximum size of one MCP tool result, in characters; longer results are truncated with a notice. */
   mcpMaxOutputChars: number;
+  /** Subscription token of the analyses' Claude agent (`claude setup-token`); without it, only the GitLab tools work. */
+  claudeOauthToken: string | undefined;
+  /** Model of the analyses (an alias such as `opus`, or a model id). */
+  model: string;
+  /** Analyses run at the same time; the others wait in a queue. */
+  maxJobs: number;
+  /** Longest an analysis may run, in milliseconds. */
+  jobTimeoutMs: number;
+  /** Groups whose projects the agent may check out. */
+  repoGroups: string[];
+  /** Where the clones and the job worktrees live. */
+  reposDir: string;
+  /** Memory server where the analyses are stored. */
+  memoryUrl: string;
+  /** Agent token of the memory store; without it, results are not stored and issue reports cannot be read. */
+  memoryToken: string | undefined;
+  memoryStore: string;
 }
 
 function integer(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
@@ -50,5 +67,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     searchGroup: env.GITLAB_SEARCH_GROUP || "henixdevelopment/squash",
     gitlabTimeoutMs: integer(env, "GITLAB_TIMEOUT_MS", 30_000),
     mcpMaxOutputChars: integer(env, "ANALYST_MCP_MAX_OUTPUT_CHARS", 40_000),
+    claudeOauthToken: env.CLAUDE_CODE_OAUTH_TOKEN || undefined,
+    model: env.ANALYST_MODEL || "opus",
+    maxJobs: integer(env, "ANALYST_MAX_JOBS", 1),
+    jobTimeoutMs: integer(env, "ANALYST_JOB_TIMEOUT_MS", 45 * 60_000),
+    repoGroups: (env.ANALYST_REPO_GROUPS || "henixdevelopment/squash/squash-tm/core,henixdevelopment/squash/squash-tm/tm-plugin")
+      .split(",").map((g) => g.trim()).filter((g) => g !== ""),
+    reposDir: env.ANALYST_REPOS_DIR || "./data/repos",
+    memoryUrl: (env.MEMORY_URL || "http://host.docker.internal:9501").replace(/\/+$/, ""),
+    memoryToken: env.MEMORY_AGENT_TOKEN || undefined,
+    memoryStore: env.ANALYST_MEMORY_STORE || "squashtm",
   };
 }
