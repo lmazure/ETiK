@@ -19,7 +19,11 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
 │ │ Claude Code in YOLO mode, firewalled  │ ──────────────────┼──► Anthropic API,
 │ │ Sessions and knowledge go to the      │                   │    SquashTM docs
 │ │ memory server (MCP + uploads)         │                   │
-│ └───────────────────────────────────────┘                   │
+│ └─┬─────────────────────────────────────┘                   │
+│   │ MCP (gitlab_* tools)                                    │
+│   ▼                                                         │
+│ Analyst server :9502 (analyst_server/) ─────────────────────┼──► GitLab, read-only:
+│ holds the read-only GitLab token                            │    work items, MRs, diffs
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -29,12 +33,15 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
   - A configuration (`test-configurations/squashtm/`) defines the system prompt, the allowed Internet domains and host ports, the tools and the skills; you upload it from the console.
   - Claude Code tests SquashTM's UI, with Playwright CLI, and its public REST API, following the Exploratory Testing process in its system prompt (`test-configurations/squashtm/system-prompt.md`).
   - For each Exploratory Test Session, the agent creates a folder `/sessions/NNN/` in the memory server, where it writes the charter, checklist, replay log (append-only), issue reports and screenshots. The workspace only holds temporary files.
-  - A firewall only lets the container reach the Anthropic API, and, while Claude Code runs, the domains and host ports of its configuration: the SquashTM documentation, and, on the host, SquashTM and the memory server.
+  - A firewall only lets the container reach the Anthropic API, and, while Claude Code runs, the domains and host ports of its configuration: the SquashTM documentation, and, on the host, SquashTM, the memory server and the analyst server.
 - **The memory server** (`memory_server/`) holds the agent's durable knowledge about the SUT across Sessions (`/knowledge/`: UI pages, private API endpoints, public REST API endpoints, business rules) and the Sessions themselves (`/sessions/`).
   - It is a separate container, so the agent cannot tamper with its files.
   - It keeps every version of every document and the change note of each change; the agent starts each change note with its Session.
   - The agent reaches it through MCP (`memory_*` tools), and uploads screenshots through its REST API (`memory-upload` skill), with a token limited to its own store.
   - You watch it live in a read-only web app.
+- **The analyst server** (`analyst_server/`) gives the agent read-only access to GitLab: work items (user stories, bugs) with their acceptance criteria, epic hierarchy and comments, merge requests with their diff and pipeline, and search (`gitlab_*` tools, over MCP).
+  - It holds the GitLab token, a read-only one (it refuses to start with a token that could write): the agent, which reads untrusted pages, never holds it.
+  - So the agent can run Charters such as "verify that User Story #8131 is properly implemented" or "verify the fix of bug #98765", and check whether a bug it finds is already reported.
 
 The bugs found then go to GitLab:
 
@@ -79,9 +86,21 @@ The memories are kept in the `memory-data` Docker volume.
 Open [`http://localhost:9501/`](http://localhost:9501/) and log in with the viewer token to watch the memory.
 See [`memory_server/README.md`](memory_server/README.md) for the server and the web app, and `memory_server/API.md` for the tools and the REST API.
 
-### 3) Run Exploratory Tests in the test container
+### 3) Start the analyst server
 
-1. Give the agent its token: copy `test_environment/memory.env.example` to `test_environment/memory.env`, and set `MEMORY_AGENT_TOKEN` to the `squashtm` token from step 2.
+```bash
+cd analyst_server
+cp .env.example .env   # then set the two tokens
+docker compose up -d --build
+curl http://localhost:9502/health
+```
+
+`.env` holds `GITLAB_READ_TOKEN`, a GitLab token with the scopes `read_api` and `read_repository` only, and `ANALYST_TOKEN`, the token the agent presents (e.g. `openssl rand -hex 32`).
+See [`analyst_server/README.md`](analyst_server/README.md) for the tools.
+
+### 4) Run Exploratory Tests in the test container
+
+1. Give the agent its tokens: copy `test_environment/memory.env.example` to `test_environment/memory.env`, and set `MEMORY_AGENT_TOKEN` to the `squashtm` token from step 2; copy `test_environment/analyst.env.example` to `test_environment/analyst.env`, and set `ANALYST_TOKEN` to the one of step 3.
 2. Build and start the container:
    ```bash
    cd test_environment
@@ -90,13 +109,13 @@ See [`memory_server/README.md`](memory_server/README.md) for the server and the 
    Only `test_environment/workspace/` is mounted in the container, which keeps the memory server's admin token out of the agent's reach.
 3. Open [`http://localhost:7681`](http://localhost:7681) (the ETiK console), click **Upload configuration folder…** and pick `test-configurations/squashtm`.
 4. Select the configuration and click **Start Claude Code**.
-   - The console opens the firewall to the configuration's domains and host ports, checks the memory server and the token, then starts Claude Code in the web terminal.
+   - The console opens the firewall to the configuration's domains and host ports, checks the memory server, the analyst server and their tokens, then starts Claude Code in the web terminal.
    - The first time, log in with your Claude subscription and accept the prompts; the login is kept in a Docker volume.
-5. Give Claude Code an Exploratory Test Charter (or let it ask you for one), and follow the Session in the memory web app: it creates the next `/sessions/NNN/` folder, proposes a charter, builds a checklist, tests, writes issue reports into `/sessions/NNN/issues/`, and records what it learns about SquashTM in `/knowledge/`.
+5. Give Claude Code an Exploratory Test Charter (or let it ask you for one), e.g. "verify that User Story #8131 is properly implemented", and follow the Session in the memory web app: it creates the next `/sessions/NNN/` folder, proposes a charter, builds a checklist, tests, writes issue reports into `/sessions/NNN/issues/`, and records what it learns about SquashTM in `/knowledge/`.
 
 See [`test_environment/README.md`](test_environment/README.md) for more details.
 
-### 4) Sync the issues with GitLab
+### 5) Sync the issues with GitLab
 
 Claude Code on the host, started from the root of this repository, does every write to GitLab, and each write waits for your approval. It uses:
 
@@ -121,7 +140,7 @@ It asks you the priority, team, security and draft flags of each new issue, then
 
 To publish a single report without searching, ask e.g. "publish /sessions/042/issues/007/issue.md in GitLab" (`gitlab-publish` skill).
 
-### 5) Post an analysis on GitLab
+### 6) Post an analysis on GitLab
 
 An analysis of GitLab issue `#<iid>` is stored in the memory server as `/analyses/<iid>/analysis.md`, with, optionally, a proposed fix `/analyses/<iid>/fix.diff`. The way to produce these analyses is being redefined.
 

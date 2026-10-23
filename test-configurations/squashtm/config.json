@@ -5,7 +5,7 @@
     "tm-en.doc.squashtest.com",
     "tm-fr.doc.squashtest.com"
   ],
-  "hostPorts": [8090, 9501],
+  "hostPorts": [8090, 9501, 9502],
   "tools": {
     "builtin": "default",
     "mcpServers": {
@@ -16,10 +16,18 @@
           "Authorization": "Bearer ${MEMORY_AGENT_TOKEN:-}",
           "X-Memory-Store": "squashtm"
         }
+      },
+      "analyst": {
+        "type": "http",
+        "url": "${ANALYST_URL:-http://host.docker.internal:9502}/mcp",
+        "headers": {
+          "Authorization": "Bearer ${ANALYST_TOKEN:-}"
+        },
+        "timeout": 3600000
       }
     }
   },
-  "env": ["MEMORY_URL", "MEMORY_AGENT_TOKEN"],
+  "env": ["MEMORY_URL", "MEMORY_AGENT_TOKEN", "ANALYST_URL", "ANALYST_TOKEN"],
   "checks": [
     {
       "name": "memory server",
@@ -29,6 +37,15 @@
       "name": "memory agent token",
       "url": "${MEMORY_URL:-http://host.docker.internal:9501}/api/stores/squashtm/list?depth=1&limit=1",
       "headers": { "Authorization": "Bearer ${MEMORY_AGENT_TOKEN}" }
+    },
+    {
+      "name": "analyst server",
+      "url": "${ANALYST_URL:-http://host.docker.internal:9502}/health"
+    },
+    {
+      "name": "analyst token",
+      "url": "${ANALYST_URL:-http://host.docker.internal:9502}/auth-check",
+      "headers": { "Authorization": "Bearer ${ANALYST_TOKEN}" }
     }
   ]
 }

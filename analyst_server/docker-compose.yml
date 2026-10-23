@@ -1,0 +1,13 @@
+# Analyst service: `docker compose up -d --build` (tokens are read from .env, see .env.example).
+services:
+  analyst:
+    container_name: analyst-server
+    build: .
+    image: analyst-server:latest
+    environment:
+      ANALYST_TOKEN: ${ANALYST_TOKEN:?set ANALYST_TOKEN in .env}
+      GITLAB_READ_TOKEN: ${GITLAB_READ_TOKEN:?set GITLAB_READ_TOKEN in .env}
+      GITLAB_URL: ${GITLAB_URL:-https://gitlab.com}
+    ports:
+      - "${ANALYST_PORT:-9502}:9502"
+    restart: unless-stopped

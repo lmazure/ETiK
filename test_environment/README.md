@@ -9,6 +9,8 @@ On the host, what the configuration needs: the application under test and, usual
 
 Copy `memory.env.example` to `memory.env` and set `MEMORY_AGENT_TOKEN` to that agent token (the value after `<store>=` in `MEMORY_AGENT_TOKENS` of `../memory_server/.env`; a token listed there for several stores reaches all of them). `memory.env` is gitignored. Its variables are passed to Claude Code only when the configuration lists them in `env`; it only holds the agent's own token, the admin token stays outside the container.
 
+A configuration that reads GitLab through the analyst server (e.g. `squashtm`, see `../analyst_server/README.md`) needs `analyst.env` too: copy `analyst.env.example` to `analyst.env` (gitignored) and set `ANALYST_TOKEN` to the `ANALYST_TOKEN` of `../analyst_server/.env`. The GitLab token stays in the analyst container.
+
 ## Usage
 
 1. Build and start the container:

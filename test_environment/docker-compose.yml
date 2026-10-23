@@ -17,9 +17,12 @@ services:
     # The console, for a browser on this host only.
     ports:
       - "127.0.0.1:${ETIK_PORT:-7681}:7681"
-    # Variables that configurations may pass on to Claude Code (their "env" list), e.g. the memory agent token.
+    # Variables that configurations may pass on to Claude Code (their "env" list), e.g. the memory agent token
+    # or the analyst token.
     env_file:
       - path: memory.env
+        required: false
+      - path: analyst.env
         required: false
     volumes:
       # Working directory of Claude Code: what it writes stays on the host. A second instance needs its own.

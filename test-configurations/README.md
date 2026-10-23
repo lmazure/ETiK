@@ -25,6 +25,7 @@ Prerequisites, on the host:
 - SquashTM listening on port 8090, e.g. started with Docker Compose as described in the [SquashTM Docker quick start](https://tm-en.doc.squashtest.com/latest/install-guide/installation/install-squash/docker-install.html#quick-start), with its port published on 8090.
 - The memory server listening on port 9501 (see [`../memory_server/README.md`](../memory_server/README.md)), with an agent token for the store `squashtm` (`MEMORY_AGENT_TOKENS=squashtm=…` in `../memory_server/.env`).
 - That token as `MEMORY_AGENT_TOKEN` in `../test_environment/memory.env`.
+- The analyst server listening on port 9502 (see [`../analyst_server/README.md`](../analyst_server/README.md)), and its `ANALYST_TOKEN` in `../test_environment/analyst.env`. It serves the `gitlab_*` tools, which read GitLab work items, merge requests and search, read-only: the agent uses them for Charters about a user story or a bug fix, and to look for an existing issue before writing an issue report.
 
 The store is set in `squashtm/config.json` (the `X-Memory-Store` header of the `memory` MCP server and the `memory agent token` check); the knowledge base instructions copied into the workspace (`squashtm/files/knowledge/INSTRUCTIONS.md`) and the `memory-upload` script name it too.
 
