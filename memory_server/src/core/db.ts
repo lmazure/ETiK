@@ -67,8 +67,7 @@ const MIGRATIONS: string[] = [
     BEGIN SELECT RAISE(ABORT, 'changesets are append-only'); END;
   CREATE TRIGGER changesets_no_delete BEFORE DELETE ON changesets
     BEGIN SELECT RAISE(ABORT, 'changesets are append-only'); END;
-  `,
-  `
+
   CREATE TABLE embeddings (
     model  TEXT NOT NULL,
     hash   TEXT NOT NULL,
