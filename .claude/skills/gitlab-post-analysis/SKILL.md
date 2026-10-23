@@ -5,7 +5,7 @@ description: Post on its GitLab issue the analysis written by the analysis agent
 
 # Post an Analysis on GitLab
 
-The analysis agent (configuration `test-configurations/gitlab-analysis/`, in the test container) cannot write to GitLab: it writes its analysis of issue `#<iid>` of https://gitlab.com/henixdevelopment/squash/squash-tm/core/squashtest-tm-staging to the memory server, store `squashtm`:
+An analysis of issue `#<iid>` of https://gitlab.com/henixdevelopment/squash/squash-tm/core/squashtest-tm-staging is stored in the memory server, store `squashtm`:
 
 - `/analyses/<iid>/analysis.md` (tag `analysis`): the comment to post;
 - `/analyses/<iid>/fix.diff` (tag `fix`), optional: the proposed fix, with the metadata `project`, `target_branch` and `base_sha`.

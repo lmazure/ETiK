@@ -1,7 +1,7 @@
 # ETiK test container: `docker compose up -d --build`, then open http://localhost:7681 (see README.md).
 services:
   etik:
-    # Another name (with ETIK_PORT, ETIK_WORKSPACE and `docker compose -p <project>`) runs a second instance, e.g. for code analysis.
+    # Another name (with ETIK_PORT, ETIK_WORKSPACE and `docker compose -p <project>`) runs a second instance, e.g. to run two configurations at the same time.
     container_name: ${ETIK_CONTAINER:-etik}
     build: .
     image: etik:latest
@@ -17,12 +17,9 @@ services:
     # The console, for a browser on this host only.
     ports:
       - "127.0.0.1:${ETIK_PORT:-7681}:7681"
-    # Variables that configurations may pass on to Claude Code (their "env" list), e.g. the memory agent token
-    # or the read-only GitLab token.
+    # Variables that configurations may pass on to Claude Code (their "env" list), e.g. the memory agent token.
     env_file:
       - path: memory.env
-        required: false
-      - path: gitlab.env
         required: false
     volumes:
       # Working directory of Claude Code: what it writes stays on the host. A second instance needs its own.
@@ -31,11 +28,8 @@ services:
       - claude-config:/home/node/.claude
       # Uploaded configurations.
       - etik-state:/var/lib/etik
-      # Code repositories cloned by Claude Code (e.g. private ones), kept out of the workspace on the host.
-      - repos:/repos
     restart: unless-stopped
 
 volumes:
   claude-config:
   etik-state:
-  repos:

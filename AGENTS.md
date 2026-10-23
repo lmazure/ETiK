@@ -29,7 +29,6 @@ Before finishing such a change:
 5. When a tool is added, renamed or removed, also update the tool names used in the configuration examples:
     - [`test-configurations/squashtm/files/knowledge/INSTRUCTIONS.md`](test-configurations/squashtm/files/knowledge/INSTRUCTIONS.md) and [`test-configurations/squashtm/system-prompt.md`](test-configurations/squashtm/system-prompt.md).
     - [`test-configurations/squashtmsite/files/knowledge/INSTRUCTIONS.md`](test-configurations/squashtmsite/files/knowledge/INSTRUCTIONS.md) and [`test-configurations/squashtmsite/system-prompt.md`](test-configurations/squashtmsite/system-prompt.md).
-    - [`test-configurations/gitlab-analysis/system-prompt.md`](test-configurations/gitlab-analysis/system-prompt.md).
     - The host skills [`.claude/skills/gitlab-sync/SKILL.md`](.claude/skills/gitlab-sync/SKILL.md), [`.claude/skills/gitlab-publish/SKILL.md`](.claude/skills/gitlab-publish/SKILL.md) and [`.claude/skills/gitlab-post-analysis/SKILL.md`](.claude/skills/gitlab-post-analysis/SKILL.md), and the allowlist of [`.claude/settings.json`](.claude/settings.json).
 6. Run `npm test` in `memory_server/`.
 

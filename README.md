@@ -36,7 +36,7 @@ Experimenting with Claude Code and Playwright CLI impressed me a lot. But there 
   - The agent reaches it through MCP (`memory_*` tools), and uploads screenshots through its REST API (`memory-upload` skill), with a token limited to its own store.
   - You watch it live in a read-only web app.
 
-The bugs found then go to GitLab, and GitLab issues can be analysed against the code:
+The bugs found then go to GitLab:
 
 ```
  Host                                                               Internet
@@ -47,17 +47,10 @@ The bugs found then go to GitLab, and GitLab issues can be analysed against the 
 │   ▼                                                         │    by you
 │ Memory server :9501                                         │
 │ /sessions/ (issue reports)    /analyses/ (analyses, fixes)  │
-│   ▲ MCP, REST                                               │
-│ ┌─┴─────────────────────────────────────┐                   │
-│ │ Analysis instance of the test         │ ──────────────────┼──► GitLab, read-only:
-│ │ container (gitlab-analysis), YOLO,    │                   │    issues, git clone
-│ │ firewalled; code in a Docker volume   │                   │
-│ └───────────────────────────────────────┘                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 - **Claude Code on the host**, started at the root of this repository, does every write to GitLab, and each one waits for your approval: it creates issues from the issue reports of the memory server, or comments on the existing ones (`gitlab-sync`), and posts the analyses and their Draft merge requests (`gitlab-post-analysis`).
-- **The analysis instance** is a second instance of the test container, running the configuration `test-configurations/gitlab-analysis/`. With a read-only GitLab token, it reads an issue, clones the private code into a Docker volume, finds the cause of the bug, and writes its analysis, a proposed fix and further tests to the memory server. It cannot write anything to GitLab.
 
 ## Usage example
 
@@ -128,18 +121,12 @@ It asks you the priority, team, security and draft flags of each new issue, then
 
 To publish a single report without searching, ask e.g. "publish /sessions/042/issues/007/issue.md in GitLab" (`gitlab-publish` skill).
 
-### 5) Analyse a GitLab issue
+### 5) Post an analysis on GitLab
 
-1. Fill in `test-configurations/gitlab-analysis/files/code-projects.md` with the GitLab projects holding the code of SquashTM.
-2. Give the analysis agent a **read-only** GitLab token: copy `test_environment/gitlab.env.example` to `test_environment/gitlab.env` and set `GITLAB_READ_TOKEN` (scopes `read_api` and `read_repository` only, e.g. a group access token with the Reporter role).
-3. Start a second instance of the test container, next to the testing one:
-   ```bash
-   cd test_environment
-   ETIK_CONTAINER=etik-analysis ETIK_PORT=7682 ETIK_WORKSPACE=./workspace-analysis docker compose -p etik-analysis up -d --build
-   ```
-4. Open `http://localhost:7682`, upload `test-configurations/gitlab-analysis`, start Claude Code (log in the first time), and ask e.g. "analyse #1234". It writes `/analyses/1234/analysis.md` (root cause with permalinks to the code, suggested fix, further tests as Exploratory Test Charters) and, when the fix is small, `/analyses/1234/fix.diff`.
-5. On the host, ask Claude Code e.g. "post the analysis of #1234". The `gitlab-post-analysis` skill shows you the analysis and the diff, then, with your approval:
-   - opens a Draft merge request from `fix.diff`, on a new branch `etik/1234-…` of the code project (`GITLAB_TOKEN` then needs the Developer role on that project);
-   - posts the analysis as a comment on the issue, with the link to the merge request.
+An analysis of GitLab issue `#<iid>` is stored in the memory server as `/analyses/<iid>/analysis.md`, with, optionally, a proposed fix `/analyses/<iid>/fix.diff`. The way to produce these analyses is being redefined.
 
-The agent cannot build the code or run the tests: review the merge request, build it and run the tests before marking it ready.
+On the host, ask Claude Code e.g. "post the analysis of #1234". The `gitlab-post-analysis` skill shows you the analysis and the diff, then, with your approval:
+- opens a Draft merge request from `fix.diff`, on a new branch `etik/1234-…` of the code project (`GITLAB_TOKEN` then needs the Developer role on that project);
+- posts the analysis as a comment on the issue, with the link to the merge request.
+
+The fix is neither built nor tested: review the merge request, build it and run the tests before marking it ready.

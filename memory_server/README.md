@@ -219,7 +219,7 @@ The test container (`../test_environment/`) uses the store `squashtm`, through t
 - `hostPorts` allows the memory server's host port in the container's firewall.
 - `files/knowledge/INSTRUCTIONS.md` is the policy (documents, entity schema, source tags, capture and consolidation) expressed with the tools. There is no index document: `memory_list` returns each document's description.
 - On the host, the `gitlab-sync` and `gitlab-publish` skills (`../.claude/skills/`) record in the metadata of an issue report the GitLab issue it was published to or commented on (`gitlab_issue`, `gitlab_link`, `gitlab_note`), with change notes starting with `gitlab:`.
-- The configuration `../test-configurations/gitlab-analysis/` uses the same store: the analysis agent writes its analyses of GitLab issues under `/analyses/<iid>/` (`analysis.md`, and `fix.diff`, a proposed fix), with change notes starting with `analysis_<iid>:`.
+- On the host, the `gitlab-post-analysis` skill reads the analyses of GitLab issues stored under `/analyses/<iid>/` (`analysis.md`, and `fix.diff`, a proposed fix).
 
 ## Not done yet
 
