@@ -38,7 +38,7 @@ Run several `list_issues` searches per report, with `project_id` set to the proj
 - the error message, status or exception class (e.g. `NullPointerException`, `HTTP 500`);
 - the entity and the action (e.g. `milestone delete`).
 
-An existing GitLab issue named by the report's investigation is a candidate too.
+An existing GitLab issue named by the report's investigation is a candidate too, even in another project (e.g. a plugin such as `squash-tm-api-rest`): it can be linked with `--related group/project#iid`.
 
 For the best candidates (at most five per report), read `get_issue` and `list_issue_discussions`, and compare the trigger, the perimeter and the observed behavior with the report (and the root cause, when the investigation gives one).
 
@@ -61,7 +61,7 @@ Show one table for all the reports: report path, title, proposal, candidate issu
 - for each report that has an investigation, whether to post it on the issue after the creation or the comment (it is shown for review before being posted);
 - for each creation: the priority (`Highest`, `High`, `Medium`, `Low`, `Lowest`), the team (`AI`, `Performance`, `TestManagement`, `PCI`, or none), whether it is a security issue, whether it is a draft, and whether to link it to the proposed related issues. Do not guess.
 
-Whenever you mention a candidate issue, in the table or in a question about linking it, give its full URL (`https://gitlab.com/henixdevelopment/squash/squash-tm/core/squashtest-tm-staging/-/work_items/<iid>`), not only `#iid` nor a base URL to complete, so that the user can click it to open the issue in their browser. Write it in the message text: a URL inside a question option is not clickable.
+Whenever you mention a candidate issue, in the table or in a question about linking it, give its full URL (`https://gitlab.com/henixdevelopment/squash/squash-tm/core/squashtest-tm-staging/-/work_items/<iid>`, or the URL in its own project), not only `#iid` nor a base URL to complete, so that the user can click it to open the issue in their browser. Write it in the message text: a URL inside a question option is not clickable.
 
 Write nothing to GitLab before the user has answered.
 
@@ -71,7 +71,7 @@ Create an issue:
 
 ```bash
 node .claude/skills/gitlab-publish/scripts/gitlab-publish.mjs issue /sessions/042/issues/007/issue.md \
-  --memory-url http://localhost:9501 --store squashtm --priority Medium [--team TestManagement] [--security] [--draft] [--related 1234]...
+  --memory-url http://localhost:9501 --store squashtm --priority Medium [--team TestManagement] [--security] [--draft] [--related 1234]... [--related group/project#1234]...
 ```
 
 Comment on an issue:

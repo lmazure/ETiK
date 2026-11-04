@@ -12,7 +12,7 @@ const TEAMS      = ["AI", "Performance", "TestManagement", "PCI"];
 const USAGE = [
   "Usage:",
   "  gitlab-publish.mjs issue <memory path of issue.md> --memory-url <url> --store <store> --priority <Highest|High|Medium|Low|Lowest>",
-  "                     [--team <AI|Performance|TestManagement|PCI>] [--security] [--draft] [--related <iid>]... [--display]",
+  "                     [--team <AI|Performance|TestManagement|PCI>] [--security] [--draft] [--related <iid|group/project#iid|issue URL>]... [--display]",
   "  gitlab-publish.mjs note --iid <iid> --body-file <local file> --memory-url <url> --store <store> [--media-base <memory folder>] [--display]",
 ].join("\n");
 
@@ -86,7 +86,7 @@ function parseCli() {
       if (!team) fail(`invalid team "${values.team}" (expected one of ${TEAMS.join(", ")})`);
     }
 
-    const related = values.related.map(r => parseIid(r, "--related"));
+    const related = values.related.map(parseRelated);
     return { ...common, file, priority, team, security: values.security, draft: values.draft, related };
   }
 
@@ -102,6 +102,22 @@ function parseIid(value, flag) {
   const iid = value.replace(/^#/, "");
   if (!/^[1-9][0-9]*$/.test(iid)) fail(`invalid issue iid for ${flag}: ${value}`);
   return iid;
+}
+
+/**
+ * A related issue: "1234" or "#1234" in the project, "group/project#1234" or a GitLab issue URL
+ * (".../-/issues/1234" or ".../-/work_items/1234") in any project.
+ */
+function parseRelated(value) {
+  const url = value.match(/^https:\/\/gitlab\.com\/([^?#]+?)\/-\/(?:issues|work_items)\/([1-9][0-9]*)\/?(?:[?#].*)?$/);
+  const ref = url ?? value.match(/^([\w.-]+(?:\/[\w.-]+)+)#([1-9][0-9]*)$/);
+  if (ref) return { project: ref[1], iid: ref[2] };
+  if (value.includes("/")) fail(`invalid issue for --related (expected 1234, #1234, group/project#1234 or an issue URL): ${value}`);
+  return { project: PROJECT, iid: parseIid(value, "--related") };
+}
+
+function issueRef({ project, iid }) {
+  return project === PROJECT ? `#${iid}` : `${project}#${iid}`;
 }
 
 /** GET on the store's REST API; fails with the server's message. */
@@ -264,10 +280,10 @@ async function linkRelated(token, iid, related) {
   for (const target of related) {
     try {
       await gitlab(token, "POST", `/projects/${projectPath}/issues/${iid}/links`, JSON.stringify({
-        target_project_id: PROJECT, target_issue_iid: target, link_type: "relates_to",
+        target_project_id: target.project, target_issue_iid: target.iid, link_type: "relates_to",
       }));
     } catch (e) {
-      process.stderr.write(`Warning: not linked to #${target}: ${e.message}\n`);
+      process.stderr.write(`Warning: not linked to ${issueRef(target)}: ${e.message}\n`);
     }
   }
 }
