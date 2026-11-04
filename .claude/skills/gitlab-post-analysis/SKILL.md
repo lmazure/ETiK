@@ -40,7 +40,7 @@ Ask whether to post it as is or changed. Write nothing to GitLab before the user
 
 ## 3. Post the comment
 
-1. Write the comment to a local file `tmp/analysis-<iid>.md`: first the line `_Code analysis written by the ETiK analyst (an AI agent) from the issue and the code only, without build or test run; reviewed before posting._`, an empty line, then the analysis without its first `# ` heading, with the user's changes.
+1. Write the comment to a local file `tmp/analysis-<iid>.md`: first the line `_Code analysis written by the ETiK analyst (an AI agent) from the issue and the code only, without build or test run; reviewed by another AI agent (Claude Code) before posting._`, an empty line, then the analysis without its first `# ` heading, with the user's changes.
 2. Post it:
 
    ```bash
