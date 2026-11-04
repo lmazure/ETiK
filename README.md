@@ -152,6 +152,10 @@ Then ask, e.g. "sync /sessions/042/ with GitLab" or "sync /sessions/042/issues/0
 
 It shows the analyst's investigation of each report when the tester asked for one (whether the code confirms the problem), asks you the priority, team, security and draft flags of each new issue, then creates the issues and posts the comments with their screenshots (`gitlab-publish`), and records the GitLab URL in the metadata of the issue report (`gitlab_issue`, `gitlab_link`). A report that already has a URL is skipped, and `gitlab-publish` refuses to publish it again. If you want, it then posts the investigation on the issue, after you review it (`gitlab-post-analysis`).
 
+Before anything is published, `gitlab-publish check` lists what GitLab would turn into links or notifications in the text: mentions (`@name`), references to issues and merge requests (`#N`, `!N`, which add a "mentioned in" note on the target), labels, milestones. Those the text does not mean, such as a request number `#45` or an issue of another project written `#464`, are put in backticks or rewritten after you approve.
+
+For a Session, it can also post the Session log on an issue you choose, e.g. the issue whose fix the Session verified: the log, collapsed, with its screenshots, after you review it.
+
 To publish a single report without searching, ask e.g. "publish /sessions/042/issues/007/issue.md in GitLab" (`gitlab-publish` skill).
 
 ### 6) Analyse a GitLab issue
